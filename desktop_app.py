@@ -46,7 +46,7 @@ CONTINUOUS = {
     "Uniforme": (UniformDistribution, {"a": 0.0, "b": 10.0}, {"a": "a · Límite inferior", "b": "b · Límite superior"}),
     "Exponencial": (ExponentialDistribution, {"lambda_param": 0.2}, {"lambda_param": "λ · Tasa"}),
     "Erlang": (ErlangDistribution, {"k": 2, "lambda_param": 1.0}, {"k": "k · Forma (entero)", "lambda_param": "λ · Tasa"}),
-    "Normal": (NormalDistribution, {"mu": 0.0, "sigma": 1.0}, {"mu": "μ · Media", "sigma": "σ · Desviación"}),
+    "Normal": (NormalDistribution, {"mu": 0.0, "sigma": 1.0}, {"mu": "μ · Media", "sigma": "σ · Desviación estándar"}),
     "Chi-cuadrado": (ChiSquareDistribution, {"df": 4}, {"df": "m · Grados de libertad"}),
     "t de Student": (StudentTDistribution, {"df": 10.0}, {"df": "m · Grados de libertad"}),
     "F de Fisher": (
@@ -113,9 +113,14 @@ def format_probability(result: float) -> tuple[str, str]:
         pct_text = f"{pct:.4g}".replace(".", ",") + " %"
     elif pct > 99.99:
         pct_text = f"{pct:.6f}".rstrip("0").rstrip(".").replace(".", ",") + " %"
+        if pct_text == "100 %":
+            pct_text = "> 99,999999 %"
     else:
         pct_text = f"{pct:.2f}".replace(".", ",") + " %"
-    return pct_text, "= " + format_number(result, 6)
+    decimal_text = format_number(result, 6)
+    if decimal_text == "1":
+        decimal_text = repr(float(result)).replace(".", ",")
+    return pct_text, "= " + decimal_text
 
 
 def read_number(text):
@@ -247,14 +252,14 @@ class FitecApp:
             root.minsize(990, 610)
             root.configure(bg=BACKGROUND)
         self.mode = tk.StringVar(value="Continuas")
-        self.distribution = tk.StringVar(value="Exponencial")
-        self.prob_kind = tk.StringVar(value="hasta")
+        self.distribution = tk.StringVar(value="Normal")
+        self.prob_kind = tk.StringVar(value="entre")
         self.graph_mode = tk.StringVar(value="Densidad")
         self.parameter_vars: dict[str, tk.StringVar] = {}
         self.parameter_errors: dict[str, ttk.Label] = {}
         self.parameter_sliders: dict[str, ttk.Scale] = {}
-        self.first_var = tk.StringVar(value="5")
-        self.second_var = tk.StringVar(value="10")
+        self.first_var = tk.StringVar(value="-1")
+        self.second_var = tk.StringVar(value="1")
         self.sample_text = "0, 1, 2, 2, 3, 4"
         self._update_id = None
         self._animation_id = None
@@ -368,6 +373,7 @@ class FitecApp:
         self.stats_labels = []
         if self.show_moments:
             stats_frame = ttk.Frame(center if self.fixed_model else self.left, style="Panel.TFrame")
+            self.stats_frame = stats_frame
             if self.fixed_model:
                 stats_frame.grid(row=4, column=0, sticky="ew", pady=(8, 0))
             else:
@@ -395,29 +401,35 @@ class FitecApp:
         controls = ttk.Frame(self.prob_frame, style="Mint.TFrame")
         controls.pack(side="left", fill="x", expand=True)
         ttk.Label(controls, text="Probabilidad", background=MINT, font=(FONT, 11, "bold")).pack(anchor="w")
-        choices = ttk.Frame(controls, style="Mint.TFrame")
-        choices.pack(anchor="w", pady=(4, 2))
-        for idx, key in enumerate(("hasta", "encima", "menos", "al_menos", "entre", "exacta")):
+        row = ttk.Frame(controls, style="Mint.TFrame")
+        row.pack(fill="x", pady=(4, 0))
+        choices = ttk.Frame(row, style="Mint.TFrame")
+        choices.grid(row=0, column=0, sticky="w")
+        for idx, (key, caption) in enumerate((("hasta", "Hasta"), ("encima", "Más de"),
+                                               ("entre", "Entre"), ("exacta", "Exacto"))):
             btn = ttk.Radiobutton(
-                choices, text=PROBABILITY_LABELS[key], value=key,
+                choices, text=caption, value=key,
                 variable=self.prob_kind, style="Toolbutton",
                 command=self._probability_choice,
             )
-            btn.grid(row=idx // 3, column=idx % 3, sticky="ew", padx=(0, 3), pady=1)
+            btn.grid(row=0, column=idx, sticky="ew", padx=(0, 3), pady=1)
             if key == "exacta":
                 self.exact_button = btn
-        inputs = ttk.Frame(controls, style="Mint.TFrame")
-        inputs.pack(fill="x")
+        inputs = ttk.Frame(row, style="Mint.TFrame")
+        inputs.grid(row=0, column=1, sticky="w", padx=(5, 0))
+        def arrange_inputs(event):
+            inline = event.width >= choices.winfo_reqwidth() + inputs.winfo_reqwidth() + 8
+            inputs.grid_configure(row=0 if inline else 1, column=1 if inline else 0)
+        row.bind("<Configure>", arrange_inputs)
         self.first_group, self.first_label, self.first_error = self._limit_input(inputs, self.first_var)
         self.first_group.pack(side="left", anchor="n")
         self.second_group, self.second_label, self.second_error = self._limit_input(inputs, self.second_var)
-        self.second_label.configure(text="Límite b")
+        self.second_label.configure(text="y")
         self.result = ttk.Label(result_panel, text="—", background=MINT, foreground="#075a56",
                                 font=(FONT, 22, "bold"))
         self.result.pack()
         self.decimal_result = ttk.Label(result_panel, text="", background=MINT, foreground="#075a56",
                                         font=(FONT, 11))
-        self.decimal_result.pack(pady=(2, 0))
         self.formula = ttk.Label(result_panel, background=MINT, foreground="#075a56",
                                  font=(FONT, 10, "bold"), wraplength=155, justify="center")
         self.formula.pack(pady=(4, 0))
@@ -434,7 +446,7 @@ class FitecApp:
         group = ttk.Frame(parent, style="Mint.TFrame")
         label = ttk.Label(group, background=MINT, style="Help.TLabel")
         label.grid(row=0, column=0, padx=(0, 4), sticky="w")
-        entry = ttk.Entry(group, textvariable=var, width=7)
+        entry = ttk.Spinbox(group, textvariable=var, width=6, from_=-1e15, to=1e15, increment=1)
         entry.grid(row=0, column=1, sticky="w", pady=2)
         entry.bind("<Return>", lambda _event: self.update_plot())
         error = ttk.Label(group, style="Error.TLabel", background=MINT, wraplength=115)
@@ -482,12 +494,17 @@ class FitecApp:
                 var = tk.StringVar(value=format_number(value))
                 var.trace_add("write", self._schedule_update)
                 self.parameter_vars[key] = var
-                entry = ttk.Entry(self.parameter_box, textvariable=var, width=18)
+                if self.distribution.get() == "Normal":
+                    entry = ttk.Spinbox(self.parameter_box, textvariable=var, width=18,
+                                        from_=0.1 if key == "sigma" else -1e15,
+                                        to=1e15, increment=0.1)
+                else:
+                    entry = ttk.Entry(self.parameter_box, textvariable=var, width=18)
                 entry.pack(fill="x")
                 entry.bind("<Return>", lambda _event: self.update_plot())
                 bounds = {"lambda_param": (.05, 2 if mode == "Continuas" else 20),
                           "sigma": (.1, 5), "p": (.01, 1)}.get(key)
-                if bounds:
+                if bounds and self.distribution.get() != "Normal":
                     self._add_slider(key, var, value, bounds)
                 error = ttk.Label(self.parameter_box, style="Error.TLabel", wraplength=205)
                 error.pack(anchor="w")
@@ -498,7 +515,9 @@ class FitecApp:
             density_button.state(["disabled" if mode == "Empírica" else "!disabled"])
         if mode in ("Discretas", "Empírica"):
             self.exact_button.state(["!disabled"])
+            self.exact_button.grid()
         else:
+            self.exact_button.grid_remove()
             self.exact_button.state(["disabled"])
             if self.prob_kind.get() == "exacta":
                 self.prob_kind.set("hasta")
@@ -522,7 +541,7 @@ class FitecApp:
 
     def _prob_controls(self):
         kind = self.prob_kind.get()
-        self.first_label.configure(text={"entre": "Límite a", "exacta": "Valor k"}.get(kind, "Límite x"))
+        self.first_label.configure(text={"entre": "", "exacta": "k", "menos": "X <", "al_menos": "X ≥"}.get(kind, "x"))
         if kind == "entre":
             self.second_group.pack(side="left", anchor="n", after=self.first_group, padx=(7, 0))
         else:
@@ -530,9 +549,10 @@ class FitecApp:
 
     def reset_values(self):
         self._zoom_factor = 1.0
-        self.first_var.set("5")
-        self.second_var.set("10")
-        self.prob_kind.set("hasta")
+        normal = self.mode.get() == "Continuas" and self.distribution.get() == "Normal"
+        self.first_var.set("-1" if normal else "5")
+        self.second_var.set("1" if normal else "10")
+        self.prob_kind.set("entre" if normal else "hasta")
         self.graph_mode.set("Acumulada" if self.mode.get() == "Empírica" else "Densidad")
         if self.mode.get() == "Empírica":
             self.data_text.delete("1.0", "end")
@@ -703,8 +723,8 @@ class FitecApp:
             lo = max(support_lo, min(q_lo, *(math.floor(v) for v in limits)))
             hi = min(support_hi, max(q_hi, *(math.ceil(v) for v in limits)))
             if hi - lo > 300:
-                center = round((q_lo + q_hi) / 2)
-                lo = max(support_lo, min(q_lo, center - 150))
+                center = round(float(dist.ppf(.5)))
+                lo = max(support_lo, center - 150)
                 hi = min(support_hi, lo + 300)
                 lo = max(support_lo, hi - 300)
             if hi < lo + 5 and np.isfinite(lo):
@@ -717,6 +737,8 @@ class FitecApp:
         low_q, high_q = (.01, .99) if heavy_tail else (.001, .999)
         lo = support_lo if np.isfinite(support_lo) else float(dist.ppf(low_q))
         hi = support_hi if np.isfinite(support_hi) else float(dist.ppf(high_q))
+        if isinstance(dist, NormalDistribution):
+            lo, hi = dist.mean() - 4 * dist.std(), dist.mean() + 4 * dist.std()
         if not np.isfinite(lo):
             lo = -10.0
         if not np.isfinite(hi):
@@ -828,6 +850,16 @@ class FitecApp:
         self.result.configure(text="—")
         self.decimal_result.configure(text="")
         self.formula.configure(text="")
+        if self._animation_id is not None:
+            self.root.after_cancel(self._animation_id)
+            self._animation_id = None
+        self._plot_data = None
+        self._plot_limits.clear()
+        for label in self.stats_labels:
+            label.configure(text="—")
+        self.ax.clear()
+        self.ax.set_axis_off()
+        self.canvas.draw_idle()
 
     def _show_stats(self, mean, variance, deviation):
         for label, value in zip(self.stats_labels, (mean, variance, deviation)):
@@ -856,6 +888,7 @@ class FitecApp:
             self.root.after_cancel(self._animation_id)
             self._animation_id = None
         self.ax.clear()
+        self.ax.set_axis_on()
         self.ax.set_facecolor(SURFACE)
         self.ax.grid(axis="y", color=BORDER, linewidth=.8)
         self.ax.set_axisbelow(True)
@@ -905,15 +938,17 @@ class FitecApp:
                 top = max(1e-12, float(np.max(valid_y))) * 1.12
         self.ax.set_ylim(0, top)
         self.ax.set_xlabel("x", color=TEXT)
-        self.ax.set_ylabel(ylabel, color=TEXT)
+        self.ax.set_ylabel("f(x)" if ylabel == "Densidad" else ylabel, color=TEXT)
         self._plot_limits.clear()
         left, right = self.ax.get_xlim()
         for field, limit in zip(("first", "second"), limits):
-            # Keep a handle at the edge when the requested limit is outside the visible range.
-            marker = float(np.clip(limit, left + (right-left)*.006, right - (right-left)*.006))
+            if not left <= limit <= right:
+                continue
+            marker = limit
             self._plot_limits[field] = marker
-            self.ax.axvline(marker, color=TEAL, linewidth=1.45, linestyle=(0, (4, 3)), zorder=4)
-            self.ax.plot(marker, .96, "o", transform=self.ax.get_xaxis_transform(),
+            height = np.interp(marker, x, finite_y) if style == "curva" and not cumulative else top * .96
+            self.ax.vlines(marker, 0, height, color=TEAL, linewidth=1.35, zorder=4)
+            self.ax.plot(marker, 0, "o", clip_on=False, transform=self.ax.get_xaxis_transform(),
                          markersize=7, markerfacecolor=SURFACE, markeredgecolor=TEAL,
                          markeredgewidth=1.5, zorder=5)
         self._plot_data = (x, finite_y, style)

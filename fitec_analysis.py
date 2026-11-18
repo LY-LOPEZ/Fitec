@@ -25,11 +25,13 @@ class Candidate:
     def distribution(self):
         return getattr(stats, self.scipy_name)
 
-    def estimate(self, values):
+    def estimate(self, values, trials=None):
         if self.minimum is not None and np.min(values) < self.minimum:
             raise ValueError("La muestra está fuera del soporte.")
         if self.discrete:
             mean = float(np.mean(values))
+            if self.scipy_name == "binom":
+                return trials, mean / trials
             if self.scipy_name == "poisson":
                 return (mean,)
             if self.scipy_name == "geom":
@@ -51,6 +53,8 @@ class Candidate:
                 return {"shape": parameters[0], "scale": parameters[2]}
             case "lognorm":
                 return {"mu": math.log(parameters[2]), "sigma": parameters[0]}
+            case "binom":
+                return {"n": int(parameters[0]), "p": parameters[1]}
             case "poisson":
                 return {"lambda_param": parameters[0]}
             case "geom":
@@ -77,6 +81,7 @@ CONTINUOUS_MODELS = (
     Candidate("Lognormal", "lognorm", 2, minimum=0),
 )
 DISCRETE_MODELS = (
+    Candidate("Binomial", "binom", 1, minimum=0, discrete=True),
     Candidate("Poisson", "poisson", 1, minimum=0, discrete=True),
     Candidate("Geométrica", "geom", 1, minimum=1, discrete=True),
     Candidate("Geométrica (fallos)", "nbinom", 1, minimum=0, discrete=True),
@@ -113,13 +118,13 @@ def ks_distance(values, distribution, discrete):
                      np.max(np.abs(before - theoretical_before))))
 
 
-def _bootstrap_ks(candidate, distribution, observed, size, rng, repetitions):
+def _bootstrap_ks(candidate, distribution, observed, size, rng, repetitions, trials=None):
     exceedances = 0
     valid = 0
     for _ in range(repetitions):
         simulated = distribution.rvs(size=size, random_state=rng)
         try:
-            parameters = candidate.estimate(simulated)
+            parameters = candidate.estimate(simulated, trials)
             distance = ks_distance(simulated, candidate.distribution(*parameters), candidate.discrete)
         except (ValueError, RuntimeError, FloatingPointError, ZeroDivisionError):
             continue
@@ -131,7 +136,7 @@ def _bootstrap_ks(candidate, distribution, observed, size, rng, repetitions):
     return (1 + exceedances) / (1 + valid), valid
 
 
-def fit_models(values, discrete, repetitions=BOOTSTRAP_REPETITIONS, *, model_names=None):
+def fit_models(values, discrete, repetitions=BOOTSTRAP_REPETITIONS, *, model_names=None, trials=None):
     values = np.asarray(values, dtype=float)
     if len(values) < 5 or np.ptp(values) == 0:
         raise ValueError("Para ajustar, usa al menos cinco observaciones y dos valores distintos.")
@@ -145,13 +150,20 @@ def fit_models(values, discrete, repetitions=BOOTSTRAP_REPETITIONS, *, model_nam
         if not candidates:
             kind = "recuentos" if discrete else "datos continuos"
             raise ValueError(f"Marca al menos una distribución para {kind} en Configurar ajuste.")
+    if discrete and any(c.scipy_name == "binom" for c in candidates):
+        if trials is None:
+            candidates = [c for c in candidates if c.scipy_name != "binom"]
+            if not candidates:
+                raise ValueError("Indica el número conocido de ensayos para ajustar la binomial.")
+        elif type(trials) is not int or trials < 1 or np.max(values) > trials:
+            raise ValueError("El número de ensayos debe ser entero positivo y cubrir el mayor recuento.")
     rng = np.random.default_rng(42)
     results = []
     for candidate in candidates:
         if candidate.scipy_name in {"gamma", "weibull_min", "lognorm"} and np.min(values) <= 0:
             continue
         try:
-            parameters = tuple(float(value) for value in candidate.estimate(values))
+            parameters = tuple(float(value) for value in candidate.estimate(values, trials))
             distribution = candidate.distribution(*parameters)
             log_prob = distribution.logpmf if discrete else distribution.logpdf
             likelihood = float(np.sum(log_prob(values)))
@@ -160,7 +172,7 @@ def fit_models(values, discrete, repetitions=BOOTSTRAP_REPETITIONS, *, model_nam
             distance = ks_distance(values, distribution, discrete)
             if not math.isfinite(distance):
                 continue
-            p_value, valid = _bootstrap_ks(candidate, distribution, distance, len(values), rng, repetitions)
+            p_value, valid = _bootstrap_ks(candidate, distribution, distance, len(values), rng, repetitions, trials)
         except (ValueError, RuntimeError, FloatingPointError, ZeroDivisionError):
             continue
         k = candidate.parameter_count

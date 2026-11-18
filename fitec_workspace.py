@@ -156,6 +156,7 @@ class FitecWorkspace:
         self.worker = ThreadPoolExecutor(max_workers=1, thread_name_prefix="fitec-fit")
         self.result_fits = []
         self.loaded_model = None
+        self.trials = None
         self.fit_candidates = None
         self.plot_ready = False
         self.status = tk.StringVar(value="Pega observaciones o abre un CSV para empezar.")
@@ -246,7 +247,6 @@ class FitecWorkspace:
                         ("Guardar gráfica de resultados…", self.export_plot, "")],
             "Analizar": [("Preparar datos…", self.prepare_data, ""),
                          ("Configurar ajuste…", self.configure_fit, ""),
-                         ("Estadística descriptiva", self.describe, ""),
                          ("Ajustar distribuciones", self.fit, "F9")],
         }
         for title, entries in groups.items():
@@ -303,7 +303,6 @@ class FitecWorkspace:
         data_kind.pack(fill="x")
         data_kind.bind("<<ComboboxSelected>>", lambda _event: self._modified())
         self._button(sidebar, "Preparar datos", "prepare", self.prepare_data).pack(fill="x", pady=(12, 5))
-        self._button(sidebar, "Estadística descriptiva", "chart", self.describe).pack(fill="x", pady=(0, 5))
         self._button(sidebar, "Configurar ajuste", "settings", self.configure_fit).pack(fill="x")
         ttk.Label(sidebar, textvariable=self.fit_config_text, style="Help.TLabel").pack(anchor="w", pady=(7, 5))
         self.fit_button = self._button(sidebar, "Ajustar · F9", "fit", self.fit, style="Primary.TButton")
@@ -338,7 +337,7 @@ class FitecWorkspace:
         content.rowconfigure(0, weight=1)
         left = ttk.Frame(content, style="Panel.TFrame", padding=12)
         left.grid(row=0, column=0, sticky="nsew", padx=(0, 12))
-        ttk.Label(left, text="Estadística descriptiva", style="Section.TLabel").pack(anchor="w")
+        ttk.Label(left, text="Columna de ajuste", style="Section.TLabel").pack(anchor="w")
         self.summary = ttk.Label(left, justify="left", wraplength=360)
         self.summary.pack(anchor="w", pady=(8, 14))
         ttk.Label(left, text="Modelos ajustados", style="Section.TLabel").pack(anchor="w", pady=(0, 6))
@@ -592,16 +591,6 @@ class FitecWorkspace:
         elif self.notebook.select() == str(self.data_tab):
             self.grid.focus_set()
 
-    def describe(self):
-        self._finish_edit()
-        try:
-            self.table.values(self._current_column())
-        except ValueError as exc:
-            self._error(exc)
-            return
-        self.notebook.select(self.results_tab)
-        self._refresh_results()
-
     def configure_fit(self):
         FitSettingsDialog(self)
 
@@ -648,7 +637,7 @@ class FitecWorkspace:
         kind = self.data_kind.get()
         counts = bool(np.all(values >= 0) and np.all(values == np.floor(values)))
         discrete = kind == "Recuentos" or (kind == "Automático" and counts)
-        future = self.worker.submit(fit_models, values, discrete, model_names=self.fit_candidates)
+        future = self.worker.submit(fit_models, values, discrete, model_names=self.fit_candidates, trials=self.trials)
         self.job = future, table, column, table.revision
         self.fit_button.state(["disabled"])
         self.status.set(f"Ajustando {table.headers[column]} como {'recuentos' if discrete else 'datos continuos'}…")
@@ -688,13 +677,7 @@ class FitecWorkspace:
         except ValueError as exc:
             self.summary.configure(text=str(exc))
         else:
-            variance = decimal(np.var(values, ddof=1)) if len(values) > 1 else "—"
-            deviation = decimal(np.std(values, ddof=1)) if len(values) > 1 else "—"
-            self.summary.configure(text=(
-                f"N = {len(values)}   ·   Media {decimal(np.mean(values))}\n"
-                f"Mediana {decimal(np.median(values))}   ·   Varianza muestral {variance}\n"
-                f"Desv. estándar {deviation}   ·   Mín. {decimal(np.min(values))}   ·   Máx. {decimal(np.max(values))}"
-            ))
+            self.summary.configure(text=f"{len(values)} observaciones")
         self.result_fits = self.table.fits.get(column, [])
         self.fit_grid.delete(*self.fit_grid.get_children())
         for index, fit in enumerate(self.result_fits):
@@ -823,8 +806,9 @@ class FitecWorkspace:
             return answer is not None and (not answer or self.save_project())
         return True
 
-    def _replace_project(self, tables, path=None, active=0, candidates=None, data_kind="Automático"):
+    def _replace_project(self, tables, path=None, active=0, candidates=None, data_kind="Automático", trials=None):
         self._clear_model()
+        self.trials = trials
         self.tables, self.project_path = tables, path
         self.active, self.page = active, 0
         self.dirty = False
@@ -850,6 +834,9 @@ class FitecWorkspace:
                 raise ValueError("Versión de proyecto no compatible.")
             tables = [DataTable.from_document(item) for item in document["tables"]]
             active = int(document.get("active", 0))
+            trials = document.get("binomial_trials")
+            if trials is not None and (type(trials) is not int or trials < 1):
+                raise ValueError("Número de ensayos inválido en el proyecto.")
             candidates = document.get("fit_candidates")
             data_kind = document.get("data_kind", "Automático")
             if not tables or not 0 <= active < len(tables):
@@ -862,7 +849,7 @@ class FitecWorkspace:
                 raise ValueError("El proyecto contiene un tipo de datos inválido.")
             if self._confirm_close_project():
                 self._replace_project(tables, source, active,
-                                      None if candidates is None else tuple(candidates), data_kind)
+                                      None if candidates is None else tuple(candidates), data_kind, trials)
                 self.status.set(f"Proyecto abierto: {source.name}")
         except (OSError, ValueError, KeyError, TypeError, AttributeError) as exc:
             self._error(exc)
@@ -879,7 +866,7 @@ class FitecWorkspace:
         self._finish_edit()
         try:
             atomic_json(path, {"version": 1, "active": self.active,
-                               "fit_candidates": self.fit_candidates, "data_kind": self.data_kind.get(),
+                               "binomial_trials": self.trials, "fit_candidates": self.fit_candidates, "data_kind": self.data_kind.get(),
                                "tables": [table.as_document() for table in self.tables]})
         except (OSError, ValueError) as exc:
             self._error(exc)
@@ -962,6 +949,7 @@ class FitSettingsDialog:
         self.window, body = dialog_body(workspace, "Configurar ajuste")
         self.strategy = tk.StringVar(value="auto" if workspace.fit_candidates is None else "manual")
         self.kind = tk.StringVar(value=workspace.data_kind.get())
+        self.trials = tk.StringVar(value=str(workspace.trials or ""))
         self.checks = {}
         self.checkbuttons = []
         ttk.Label(body, text="Configurar ajuste", style="Section.TLabel",
@@ -989,6 +977,9 @@ class FitSettingsDialog:
                 button = ttk.Checkbutton(panel, text=model.label, variable=var)
                 button.pack(anchor="w", pady=2)
                 self.checkbuttons.append((label, button))
+        ttk.Label(body, text="Binomial · Ensayos conocidos (n)").pack(anchor="w")
+        ttk.Entry(body, textvariable=self.trials).pack(fill="x")
+        ttk.Label(body, text="Deja el campo vacío para omitir la binomial.").pack(anchor="w")
         self.message = ttk.Label(body, style="Help.TLabel", wraplength=340)
         self.message.pack(anchor="w")
         workspace._button(body, "Guardar configuración", "arrow", self._save).pack(fill="x", pady=(10, 0))
@@ -1016,7 +1007,16 @@ class FitSettingsDialog:
                 self.message.configure(text="Marca al menos una distribución del tipo elegido.")
                 return
         app = self.workspace
-        if (candidates, kind) != (app.fit_candidates, app.data_kind.get()):
+        raw = self.trials.get().strip()
+        try:
+            trials = int(raw) if raw else None
+            if trials is not None and trials < 1:
+                raise ValueError
+        except ValueError:
+            self.message.configure(text="Indica un número entero positivo de ensayos.")
+            return
+        if (candidates, kind, trials) != (app.fit_candidates, app.data_kind.get(), app.trials):
+            app.trials = trials
             app._set_fit_configuration(candidates, kind)
             app._modified()
         app.status.set("Configuración guardada. Pulsa F9 para aplicarla a la columna.")

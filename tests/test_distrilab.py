@@ -231,3 +231,15 @@ def test_fit_models_maps_cleanly_to_explorer_catalog():
         }
         cls(**params)
     assert ks_distance(np.array([0, 1, 2]), stats.poisson(1.0), discrete=True) > 0
+
+
+def test_binomial_fit_uses_known_trials():
+    values = np.random.RandomState(42).binomial(10, 0.5, 100)
+    fit = fit_models(values, discrete=True, trials=10, repetitions=10)[0]
+    assert fit.model == "binom"
+    assert fit.parameters == pytest.approx((10, values.mean() / 10))
+    assert fit.aic == pytest.approx(2 - 2 * fit.frozen().logpmf(values).sum())
+    assert fit.repetitions == 10
+    for invalid in (None, 0, 2, 3.5):
+        with pytest.raises(ValueError, match="ensayos"):
+            fit_models(values, discrete=True, trials=invalid, model_names=["binom"])

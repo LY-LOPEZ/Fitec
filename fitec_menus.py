@@ -66,6 +66,7 @@ def validate_session(settings, catalog, generator_models):
 class FitecMenus:
     def __init__(self, root, app):
         self.root, self.app = root, app
+        self.fit_workspace = None
         self.explorer, self.generator = app.explorer, app.generator
         self.project_path = None
         self.defaults = self._snapshot()
@@ -144,7 +145,15 @@ class FitecMenus:
         self.view_menu = view
 
         analysis = self._menu("Analizar")
+        self._item(analysis, "Ajustar distribuciones a datos…", self.open_fit_workspace, "density")
+        analysis.add_separator()
         self._item(analysis, "Calcular probabilidad", self.calculate, "density")
+        for kind, caption in (("menos", "Menos de (<)"), ("al_menos", "Al menos (≥)")):
+            analysis.add_radiobutton(label=caption, variable=self.explorer.prob_kind, value=kind,
+                                     command=self.explorer._probability_choice)
+        self.show_details = tk.BooleanVar(value=False)
+        analysis.add_checkbutton(label="Mostrar momentos y resultado decimal", variable=self.show_details,
+                                 command=self._toggle_details)
         self._item(analysis, "Distribución empírica", self.empirical, "cumulative")
 
         options = self._menu("Opciones")
@@ -391,6 +400,14 @@ class FitecMenus:
                 return
             self.notify(f"Gráfica guardada: {Path(path).name}")
 
+    def _toggle_details(self):
+        if self.show_details.get():
+            self.explorer.stats_frame.pack(side="bottom", fill="x", pady=(10, 0))
+            self.explorer.decimal_result.pack(after=self.explorer.result)
+        else:
+            self.explorer.stats_frame.pack_forget()
+            self.explorer.decimal_result.pack_forget()
+
     def calculate(self):
         self.app.select_view("distributions")
         self.explorer.update_plot()
@@ -473,6 +490,20 @@ class FitecMenus:
         window.grab_set()
         button.focus_set()
 
+    def open_fit_workspace(self):
+        from fitec_workspace import FitecWorkspace
+
+        if self.fit_workspace and self.fit_workspace.root.winfo_exists():
+            self.fit_workspace.root.deiconify()
+            self.fit_workspace.root.lift()
+            return
+        window = tk.Toplevel(self.root)
+        self.fit_workspace = FitecWorkspace(window, type(self.explorer))
+
     def close(self):
+        if self.fit_workspace and self.fit_workspace.root.winfo_exists():
+            self.fit_workspace.close()
+            if self.fit_workspace.root.winfo_exists():
+                return
         if self._confirm_changes():
             self.root.destroy()

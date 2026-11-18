@@ -103,6 +103,8 @@ class GeometricDistribution(Distribution):
 
     def _create_distribution(self, **params):
         """Create scipy geometric distribution."""
+        if params["p"] == 1:
+            return stats.rv_discrete(values=([1], [1.0]))
         return stats.geom(p=params["p"])
 
     def get_parameters(self) -> dict[str, Any]:
@@ -132,6 +134,8 @@ class ZeroGeometricDistribution(Distribution):
         self.set_parameters(p=p)
 
     def _create_distribution(self, **params):
+        if params["p"] == 1:
+            return stats.rv_discrete(values=([0], [1.0]))
         return stats.geom(p=params["p"], loc=-1)
 
     def get_parameters(self) -> dict[str, Any]:

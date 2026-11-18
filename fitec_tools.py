@@ -35,7 +35,7 @@ def toolbar_button(parent, icons, label, icon, command, *, primary=False):
 
 class FitecTools:
     def __init__(self, root, explorer_type, parse_parameter, parse_observations):
-        root.title("FITEC")
+        root.title("FI-TEC – Probabilidad")
         if root.tk.call("tk", "windowingsystem") == "win32":
             try:
                 root.iconbitmap(default=str(ASSETS / "FI-TEC-Dado.ico"))
@@ -47,33 +47,41 @@ class FitecTools:
         root.minsize(min(1080, width), min(620, height))
         root.configure(background=PAPER)
         self.icons = make_icons(root)
-        self.nav_icons = make_icons(root, color="#e2f5f4")
+        symbol_size = max(20, round(root.winfo_fpixels("18p")))
+        self.nav_icons = {}
+        for _, _, icon in WORKSPACES:
+            with Image.open(ASSETS / f"symbol-{icon}.png") as source:
+                glyph = source.resize((symbol_size, symbol_size), Image.Resampling.LANCZOS)
+            self.nav_icons[icon] = ImageTk.PhotoImage(glyph, master=root)
 
         self.content = tk.Frame(root, background=PAPER)
         self.content.pack(fill="both", expand=True)
         self.sidebar = tk.Frame(self.content, background=SIDEBAR)
         self.sidebar.pack(side="left", fill="y")
-        brand = tk.Frame(self.sidebar, background=HEADER_INK)
+        brand = tk.Frame(self.sidebar, background=SIDEBAR)
         brand.pack(fill="x")
-        self._add_header_mark(root, brand, "fitec.png", "FI-TEC", "18p",
-                              viewport=(.025, .248, .98, .842), side="left", padx=19, pady=20)
+        self._add_header_mark(root, brand, "symbol-brand.png", "", "29p",
+                              side="left", padx=(14, 4), pady=16)
+        tk.Label(brand, text="FI-TEC", background=SIDEBAR, foreground="white",
+                 font=("Inter", 20, "bold")).pack(side="left", padx=(0, 12))
         workspace = tk.Frame(self.content, background=PAPER)
         workspace.pack(side="left", fill="both", expand=True)
         banner = tk.Frame(workspace, background=SIDEBAR)
         banner.pack(fill="x", padx=12, pady=(10, 0))
-        self._add_header_mark(root, banner, "usfx.png", "Escudo de la USFX", "27p",
-                              side="right", padx=(8, 16), pady=10)
         tk.Label(banner, text="USFX", background=SIDEBAR, foreground="white",
-                 font=("Inter", 11, "bold")).pack(side="right")
-        self._add_header_mark(root, banner, "fitec-blender.png", "", "36p",
-                              viewport=(0, 0, 1, 1), side="right", padx=(8, 8))
+                 font=("Inter", 18, "bold")).pack(side="right", padx=(0, 14))
+        self._add_header_mark(root, banner, "usfx.png", "Escudo de la USFX", "37p",
+                              side="right", padx=(8, 8), pady=6)
+        self._add_header_mark(root, banner, "fitec-blender.png", "", "41p",
+                              side="right", padx=(4, 8))
         headings = tk.Frame(banner, background=SIDEBAR)
         headings.pack(side="left", padx=18, pady=9)
         self.heading = tk.Label(headings, background=SIDEBAR, foreground="white",
                                 font=("Inter", 19, "bold"), borderwidth=0)
-        self.heading.pack(anchor="w")
+        self.heading.pack(side="left")
+        tk.Frame(headings, background=BANNER_TEXT, width=1, height=23).pack(side="left", padx=12)
         tk.Label(headings, text="Simulación de Sistemas", background=SIDEBAR, foreground=BANNER_TEXT,
-                 font=("Inter", 9), borderwidth=0).pack(anchor="w", pady=(2, 0))
+                 font=("Inter", 11), borderwidth=0).pack(side="left")
 
         self.toolbar = ttk.Frame(workspace, style="Panel.TFrame", padding=(10, 6))
         page_host = ttk.Frame(workspace)
@@ -86,6 +94,7 @@ class FitecTools:
             page.grid(row=0, column=0, sticky="nsew")
         self.explorer = explorer_type(self.pages["distributions"], embedded=True, show_moments=True,
                                       external_controls=True)
+        self.explorer.stats_frame.pack_forget()
         style = ttk.Style(root)
         style.configure("Nav.Toolbutton", padding=(12, 11), font=("Inter", 10, "bold"),
                         background=SIDEBAR, foreground="#e9f5f6", bordercolor=SIDEBAR,
@@ -97,8 +106,8 @@ class FitecTools:
                   darkcolor=[("selected", "#17646b"), ("active", "#204a59")])
         style.configure("Graph.Toolbutton", padding=(7, 5), font=("Inter", 9, "bold"),
                         background="#f3f7f8", foreground=INK, bordercolor="#d6e3e7")
-        style.map("Graph.Toolbutton", foreground=[("disabled", "#687d84"), ("selected", "#075a56")],
-                  background=[("disabled", PAPER), ("selected", "#d8f4ef"), ("active", PAPER)],
+        style.map("Graph.Toolbutton", foreground=[("disabled", "#687d84"), ("selected", "white")],
+                  background=[("disabled", PAPER), ("selected", TEAL), ("active", PAPER)],
                   bordercolor=[("selected", "#96d6ce")])
         style.configure("Toolbar.TButton", padding=(7, 5), font=("Inter", 9, "bold"),
                         foreground=INK, background="white", bordercolor="#d6e3e7")
@@ -156,12 +165,12 @@ class FitecTools:
 
     def _build_distribution_commands(self, parent):
         self.density_button = ttk.Radiobutton(
-            parent, text="Densidad", value="Densidad", image=self.icons["density"], compound="left",
+            parent, text="Densidad", value="Densidad",
             variable=self.explorer.graph_mode, style="Graph.Toolbutton", command=self.explorer.update_plot,
         )
         self.density_button.pack(side="left", padx=(0, 3))
         ttk.Radiobutton(
-            parent, text="Acumulada", value="Acumulada", image=self.icons["cumulative"], compound="left",
+            parent, text="Acumulada", value="Acumulada",
             variable=self.explorer.graph_mode, style="Graph.Toolbutton", command=self.explorer.update_plot,
         ).pack(side="left")
         toolbar_button(parent, self.icons, "Usar en generador", "arrow", self._transfer).pack(side="right")
@@ -171,8 +180,7 @@ class FitecTools:
     def _sync_distribution_commands(self, *_):
         mode = self.explorer.mode.get()
         is_discrete = mode == "Discretas"
-        self.density_button.configure(text="Masa" if is_discrete else "Densidad",
-                                      image=self.icons["mass" if is_discrete else "density"])
+        self.density_button.configure(text="Masa" if is_discrete else "Densidad")
         self.density_button.state(["disabled" if mode == "Empírica" else "!disabled"])
 
     def select_view(self, name):

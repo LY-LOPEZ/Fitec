@@ -1,6 +1,8 @@
 """Course explanations, congruential generation and optional OpenAI transport."""
 
 from dataclasses import dataclass
+from decimal import Decimal
+from fractions import Fraction
 import json
 import math
 import os
@@ -52,6 +54,8 @@ class Suggestion:
 
 def decimal(value):
     val = float(value)
+    if isinstance(value, Fraction) and value < 1 and f"{val:.12g}" == "1":
+        return str(Decimal(value.numerator) / Decimal(value.denominator)).replace(".", ",")
     if val == 0.0:
         return "0"
     if val.is_integer() and abs(val) < 1e12:
@@ -399,7 +403,7 @@ def congruential_rows(a, c, m, seed, count):
     for i in range(1, count + 1):
         total = a * x + c
         x = total % m
-        rows.append((i, total, x, x / m))
+        rows.append((i, total, x, Fraction(x, m)))
     return rows
 
 
