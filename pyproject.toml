@@ -1,0 +1,198 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "probviz"
+version = "1.0.8"
+description = "Interactive probability distribution visualizer: 16 univariate + multivariate, copulas, mixtures, fitting, Monte Carlo, and statistical tests"
+readme = "README.md"
+license = { text = "MIT" }
+authors = [
+    { name = "LY-LOPEZ", email = "lopez.yapu.marco@usfx.bo" },
+]
+maintainers = [{ name = "LY-LOPEZ", email = "lopez.yapu.marco@usfx.bo" }]
+keywords = ["statistics", "probability", "distributions", "visualization", "streamlit", "monte-carlo"]
+requires-python = ">=3.10"
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Education",
+    "Intended Audience :: Science/Research",
+    "Intended Audience :: Developers",
+    "Topic :: Scientific/Engineering :: Mathematics",
+    "Topic :: Scientific/Engineering :: Visualization",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Typing :: Typed",
+]
+dependencies = [
+    "numpy>=1.24.0",
+    "scipy>=1.11.0",
+    "pandas>=2.1.0",
+    "matplotlib>=3.8.0",
+    "seaborn>=0.13.0",
+    "plotly>=5.18.0",
+    "streamlit>=1.29.0",
+    "scikit-learn>=1.7.2",
+    "statsmodels>=0.15.0",
+    "joblib>=1.6.0",
+]
+
+[project.optional-dependencies]
+desktop = [
+    "pillow>=10.0.0",
+    "pyinstaller>=6.0",
+]
+
+dev = [
+    "pytest>=7.4.0",
+    "pytest-cov>=4.1.0",
+    "mypy>=1.7.0",
+    "black>=23.12.0",
+    "flake8>=6.1.0",
+    "isort>=5.13.0",
+    "ruff>=0.1.0",
+    "pre-commit>=3.0.0",
+    "pip-audit>=2.7.0",
+]
+docs = [
+    "mkdocs>=1.6.0",
+    "mkdocs-material>=9.0.0",
+    "mkdocstrings[python]>=0.24.0",
+]
+test = [
+    "pytest>=7.4.0",
+    "pytest-cov>=4.1.0",
+]
+
+[project.scripts]
+probviz = "src.cli:main"
+fitec = "desktop_app:main"
+
+[project.urls]
+Homepage = "https://github.com/LY-LOPEZ/Fitec"
+Repository = "https://github.com/LY-LOPEZ/Fitec"
+Issues = "https://github.com/LY-LOPEZ/Fitec/issues"
+
+[tool.setuptools]
+py-modules = ["desktop_app", "fitec_analysis", "fitec_assistant", "fitec_icons", "fitec_menus",
+              "fitec_tools", "fitec_tutor", "fitec_workspace"]
+
+[tool.setuptools.package-data]
+probviz = ["assets/*.png", "assets/*.ico"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["probviz*", "src*", "web*", "tests*"]
+
+[tool.pytest.ini_options]
+minversion = "7.4"
+testpaths = ["tests"]
+python_files = "test_*.py"
+addopts = [
+    "--strict-markers",
+    "--strict-config",
+    "-ra",
+]
+filterwarnings = [
+    "error",
+    "ignore::DeprecationWarning",
+    "ignore::PendingDeprecationWarning",
+]
+
+[tool.coverage.run]
+source = ["src", "web"]
+branch = true
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+]
+fail_under = 80
+
+[tool.coverage.html]
+directory = "htmlcov"
+
+[tool.mypy]
+python_version = "3.10"
+strict = false
+warn_return_any = true
+warn_unused_configs = true
+warn_redundant_casts = true
+check_untyped_defs = true
+warn_unused_ignores = false
+show_error_codes = true
+ignore_missing_imports = true
+files = ["src"]
+
+[tool.flake8]
+max-line-length = 120
+max-complexity = 15
+extend-ignore = ["E203", "W503"]
+exclude = [
+    ".git",
+    "__pycache__",
+    "venv",
+    ".venv",
+    "build",
+    "dist",
+    ".mypy_cache",
+    ".pytest_cache",
+    "*.egg-info",
+]
+
+[tool.black]
+line-length = 100
+target-version = ["py310"]
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+    \.git
+  | \.mypy_cache
+  | \.pytest_cache
+  | venv
+  | \.venv
+  | build
+  | dist
+  | \.egg-info
+)/
+'''
+
+[tool.isort]
+profile = "black"
+line_length = 100
+py_version = 310
+skip_gitignore = true
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W", "B", "UP"]
+ignore = ["E501"]
+
+[tool.ruff.lint.isort]
+known-first-party = [
+    "probviz",
+    "src",
+    "web",
+    "tests",
+    "desktop_app",
+    "fitec_analysis",
+    "fitec_assistant",
+    "fitec_icons",
+    "fitec_menus",
+    "fitec_tools",
+    "fitec_tutor",
+    "fitec_workspace",
+]
