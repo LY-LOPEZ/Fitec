@@ -3,9 +3,7 @@ title: FITEC
 message: Software de escritorio para Simulación de Sistemas (USFX).
 type: software
 authors:
-  - name: LY-LOPEZ
-    email: lopez.yapu.marco@usfx.bo
-repository-code: https://github.com/LY-LOPEZ/Fitec
+  - name: Equipo FITEC
 license: MIT
 version: 1.0.0
 keywords:

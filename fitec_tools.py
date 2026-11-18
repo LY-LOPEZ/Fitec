@@ -6,7 +6,7 @@ import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
 import numpy as np
-from PIL import Image, ImageTk
+from PIL import Image, ImageDraw, ImageTk
 
 from fitec_assistant import FitecAssistant
 from fitec_icons import make_icons
@@ -67,7 +67,7 @@ class FitecTools:
         workspace = tk.Frame(self.content, background=PAPER)
         workspace.pack(side="left", fill="both", expand=True)
         banner = tk.Frame(workspace, background=SIDEBAR)
-        banner.pack(fill="x", padx=12, pady=(10, 0))
+        banner.pack(fill="x", padx=12)
         tk.Label(banner, text="USFX", background=SIDEBAR, foreground="white",
                  font=("Inter", 18, "bold")).pack(side="right", padx=(0, 14))
         self._add_header_mark(root, banner, "usfx.png", "Escudo de la USFX", "37p",
@@ -82,6 +82,16 @@ class FitecTools:
         tk.Frame(headings, background=BANNER_TEXT, width=1, height=23).pack(side="left", padx=12)
         tk.Label(headings, text="Simulación de Sistemas", background=SIDEBAR, foreground=BANNER_TEXT,
                  font=("Inter", 11), borderwidth=0).pack(side="left")
+        radius = max(6, round(root.winfo_fpixels("7p")))
+        disk = Image.new("RGB", (8 * radius, 8 * radius), PAPER)
+        ImageDraw.Draw(disk).ellipse((0, 0, disk.width - 1, disk.height - 1), fill=SIDEBAR)
+        disk = disk.resize((2 * radius, 2 * radius), Image.Resampling.LANCZOS)
+        for anchor, x, y in (("nw", 0, 0), ("ne", 1, 0), ("sw", 0, 1), ("se", 1, 1)):
+            tile = disk.crop((x * radius, y * radius, (x + 1) * radius, (y + 1) * radius))
+            corner = tk.Label(banner, borderwidth=0, highlightthickness=0, padx=0, pady=0)
+            corner.image = ImageTk.PhotoImage(tile, master=root)
+            corner.configure(image=corner.image)
+            corner.place(relx=x, rely=y, anchor=anchor)
 
         self.toolbar = ttk.Frame(workspace, style="Panel.TFrame", padding=(10, 6))
         page_host = ttk.Frame(workspace)

@@ -453,11 +453,13 @@ class FitecMenus:
                           "Explora distribuciones de probabilidad y genera muestras reproducibles.")
 
     def license(self):
-        try:
-            terms = Path(__file__).with_name("LICENSE").read_text(encoding="utf-8")
-        except OSError:
-            terms = "Licencia MIT. Consulta el archivo LICENSE del repositorio de FITEC."
-        self._help_dialog("Acuerdo de licencia", terms)
+        self._help_dialog("Acuerdo de licencia",
+                          "FITEC es gratuito y es software libre.\n\n"
+                          "La licencia MIT permite usar, estudiar, modificar y distribuir el programa, "
+                          "incluso con fines comerciales. Al distribuir copias o partes sustanciales, "
+                          "incluye el aviso de derechos de autor y la licencia MIT.\n\n"
+                          "El programa se ofrece sin garantía. El texto completo se incluye "
+                          "en el archivo LICENSE del proyecto.")
 
     def _help_dialog(self, title, content, icon="help"):
         prior_focus = self.root.focus_get()

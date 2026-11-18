@@ -9,9 +9,9 @@ description = "Interactive probability distribution visualizer: 16 univariate + 
 readme = "README.md"
 license = { text = "MIT" }
 authors = [
-    { name = "LY-LOPEZ", email = "lopez.yapu.marco@usfx.bo" },
+    { name = "Equipo FITEC" },
 ]
-maintainers = [{ name = "LY-LOPEZ", email = "lopez.yapu.marco@usfx.bo" }]
+maintainers = [{ name = "Equipo FITEC" }]
 keywords = ["statistics", "probability", "distributions", "visualization", "streamlit", "monte-carlo"]
 requires-python = ">=3.10"
 classifiers = [
@@ -72,11 +72,6 @@ test = [
 [project.scripts]
 probviz = "src.cli:main"
 fitec = "desktop_app:main"
-
-[project.urls]
-Homepage = "https://github.com/LY-LOPEZ/Fitec"
-Repository = "https://github.com/LY-LOPEZ/Fitec"
-Issues = "https://github.com/LY-LOPEZ/Fitec/issues"
 
 [tool.setuptools]
 py-modules = ["desktop_app", "fitec_analysis", "fitec_assistant", "fitec_icons", "fitec_menus",

@@ -415,16 +415,30 @@ class FitecApp:
             btn.grid(row=0, column=idx, sticky="ew", padx=(0, 3), pady=1)
             if key == "exacta":
                 self.exact_button = btn
-        inputs = ttk.Frame(row, style="Mint.TFrame")
-        inputs.grid(row=0, column=1, sticky="w", padx=(5, 0))
-        def arrange_inputs(event):
-            inline = event.width >= choices.winfo_reqwidth() + inputs.winfo_reqwidth() + 8
-            inputs.grid_configure(row=0 if inline else 1, column=1 if inline else 0)
-        row.bind("<Configure>", arrange_inputs)
-        self.first_group, self.first_label, self.first_error = self._limit_input(inputs, self.first_var)
-        self.first_group.pack(side="left", anchor="n")
-        self.second_group, self.second_label, self.second_error = self._limit_input(inputs, self.second_var)
+        self.first_group, self.first_label, self.first_error = self._limit_input(row, self.first_var)
+        self.second_group, self.second_label, self.second_error = self._limit_input(row, self.second_var)
         self.second_label.configure(text="y")
+
+        def arrange_inputs(_event=None):
+            between = self.prob_kind.get() == "entre"
+            required = choices.winfo_reqwidth() + self.first_group.winfo_reqwidth() + 5
+            if between:
+                required += self.second_group.winfo_reqwidth() + 7
+            inline = row.winfo_width() >= required
+            choices.grid_configure(columnspan=1 if inline else 2)
+            field_row, column = (0, 1) if inline else (1, 0)
+            for index, (group, error) in enumerate(((self.first_group, self.first_error),
+                                                     (self.second_group, self.second_error))):
+                if index and not between:
+                    group.grid_remove()
+                    error.grid_remove()
+                    continue
+                pad = (7 if index else 5, 0)
+                group.grid(row=field_row, column=column + index, sticky="w", padx=pad)
+                error.grid(row=field_row + 1, column=column + index, sticky="w", padx=pad)
+
+        self._arrange_inputs = arrange_inputs
+        row.bind("<Configure>", arrange_inputs)
         self.result = ttk.Label(result_panel, text="—", background=MINT, foreground="#075a56",
                                 font=(FONT, 22, "bold"))
         self.result.pack()
@@ -449,8 +463,7 @@ class FitecApp:
         entry = ttk.Spinbox(group, textvariable=var, width=6, from_=-1e15, to=1e15, increment=1)
         entry.grid(row=0, column=1, sticky="w", pady=2)
         entry.bind("<Return>", lambda _event: self.update_plot())
-        error = ttk.Label(group, style="Error.TLabel", background=MINT, wraplength=115)
-        error.grid(row=1, column=0, columnspan=2, sticky="w")
+        error = ttk.Label(parent, style="Error.TLabel", background=MINT, wraplength=115)
         return group, label, error
 
     def _schedule_update(self, *_):
@@ -542,10 +555,7 @@ class FitecApp:
     def _prob_controls(self):
         kind = self.prob_kind.get()
         self.first_label.configure(text={"entre": "", "exacta": "k", "menos": "X <", "al_menos": "X ≥"}.get(kind, "x"))
-        if kind == "entre":
-            self.second_group.pack(side="left", anchor="n", after=self.first_group, padx=(7, 0))
-        else:
-            self.second_group.pack_forget()
+        self._arrange_inputs()
 
     def reset_values(self):
         self._zoom_factor = 1.0
