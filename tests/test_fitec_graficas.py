@@ -143,3 +143,35 @@ def test_largest_congruential_residue_stays_below_one():
     uniform = congruential_rows(1, 0, m, m - 1, 1)[0][-1]
     assert uniform < 1
     assert decimal(uniform).startswith("0,999")
+
+
+def test_normal_surface_slice(desktop):
+    explorer = desktop.explorer
+    explorer.select_model("Normal", {"mu": 0, "sigma": 1}, discrete=False, event=("entre", -1, 1))
+    surface = explorer.surface
+    surface.toggle()
+    try:
+        surface.slide(1.5)
+        explorer.update_plot()
+        x, sigma, density = surface.axes.lines[0].get_data_3d()
+        np.testing.assert_allclose(sigma, 1.5)
+        np.testing.assert_allclose(density, stats.norm.pdf(x, scale=1.5))
+        assert explorer.ax in explorer.figure.axes
+    finally:
+        surface.close()
+
+
+def test_galton_paths_and_exportable_sample(desktop):
+    generator = desktop.generator
+    generator.select_distribution("Binomial", {"n": 3, "p": .5})
+    generator.count.set("20")
+    generator.seed.set("42")
+    board = generator.galton
+    board.start(play=False)
+    assert "75,00 %" in board.info.cget("text")
+    for _ in range(80):
+        board.tick()
+        board.stop()
+    expected = (np.random.default_rng(42).random((20, 3)) < .5).sum(axis=1)
+    np.testing.assert_array_equal(generator.sample, expected.astype(str))
+    np.testing.assert_array_equal(board.counts, np.bincount(expected, minlength=4))

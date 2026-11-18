@@ -855,8 +855,12 @@ class FitecApp:
         self.result.configure(text=pct_text)
         self.decimal_result.configure(text=dec_text)
         self.formula.configure(text=formula)
+        if hasattr(self, "surface"):
+            self.surface.draw()
 
     def _clear_result(self):
+        if hasattr(self, "surface"):
+            self.surface.close()
         self.result.configure(text="—")
         self.decimal_result.configure(text="")
         self.formula.configure(text="")

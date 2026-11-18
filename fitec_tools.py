@@ -9,6 +9,7 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageTk
 
 from fitec_assistant import FitecAssistant
+from fitec_demo import Galton, NormalSurface
 from fitec_icons import make_icons
 from fitec_menus import FitecMenus
 
@@ -183,12 +184,18 @@ class FitecTools:
             parent, text="Acumulada", value="Acumulada",
             variable=self.explorer.graph_mode, style="Graph.Toolbutton", command=self.explorer.update_plot,
         ).pack(side="left")
+        self.explorer.surface = NormalSurface(parent, self.explorer)
+        self.explorer.distribution.trace_add("write", self._sync_distribution_commands)
         toolbar_button(parent, self.icons, "Usar en generador", "arrow", self._transfer).pack(side="right")
         toolbar_button(parent, self.icons, "Restablecer", "reset", self.explorer.reset_values).pack(
             side="right", padx=(6, 5))
 
     def _sync_distribution_commands(self, *_):
         mode = self.explorer.mode.get()
+        normal = mode == "Continuas" and self.explorer.distribution.get() == "Normal"
+        self.explorer.surface.button.state(["!disabled" if normal else "disabled"])
+        if not normal:
+            self.explorer.surface.close()
         is_discrete = mode == "Discretas"
         self.density_button.configure(text="Masa" if is_discrete else "Densidad")
         self.density_button.state(["disabled" if mode == "Empírica" else "!disabled"])
@@ -309,6 +316,7 @@ class RandomNumbers:
         table = ttk.Frame(tabs, style="Panel.TFrame", padding=(0, 6))
         tabs.add(graph, text="Gráfica")
         tabs.add(table, text="Datos")
+        self.galton = Galton(tabs, self)
 
         figure = Figure(figsize=(4.5, 3), dpi=100, facecolor="white")
         figure.subplots_adjust(left=.15, right=.97, bottom=.19, top=.94)
@@ -360,7 +368,8 @@ class RandomNumbers:
             self.error.configure(text="Usa de 1 a 100 000 valores y una semilla entera de 0 a 4 294 967 295.")
             return
         name = self.name.get()
-        normal = None
+        model = None
+        observed = None
         try:
             if name == "Empírica":
                 observed = self.parse_observations(self.empirical.get("1.0", "end"))
@@ -373,8 +382,6 @@ class RandomNumbers:
                 model = factory(**parameters)
                 values = model.rvs(size=count, random_state=seed)
                 discrete = model.is_discrete
-                if name == "Normal":
-                    normal = model
             if not np.all(np.isfinite(values)):
                 raise ValueError("Los parámetros produjeron valores no finitos.")
         except (ValueError, TypeError, OverflowError) as exc:
@@ -382,9 +389,9 @@ class RandomNumbers:
             return
 
         sample = [str(int(value)) if discrete else repr(float(value)).replace(".", ",") for value in values]
-        self._show_sample(sample, f"{name} · {count} valores · Semilla {seed}", normal=normal)
+        self._show_sample(sample, f"{name} · {count} valores · Semilla {seed}", model=model, observed=observed)
 
-    def _show_sample(self, sample, caption="", *, normal=None):
+    def _show_sample(self, sample, caption="", *, model=None, observed=None):
         self.sample = sample
         self.sample_caption = caption
         self.preview.delete(*self.preview.get_children())
@@ -397,9 +404,9 @@ class RandomNumbers:
                                        if len(sample) > PREVIEW_ROWS else ""))
         for button in (self.copy_button, self.csv_button):
             button.state(["disabled" if sample is None else "!disabled"])
-        self._plot_sample(sample, normal=normal)
+        self._plot_sample(sample, model=model, observed=observed)
 
-    def _plot_sample(self, sample, *, normal=None):
+    def _plot_sample(self, sample, *, model=None, observed=None):
         from matplotlib.ticker import FuncFormatter, MaxNLocator
 
         ax = self.sample_axes
@@ -434,9 +441,19 @@ class RandomNumbers:
         ax.yaxis.set_major_formatter(formatter)
         ax.xaxis.set_major_formatter(formatter)
         bins = max(1, min(32, int(np.ceil(np.sqrt(len(sample))))))
-        if discrete and span <= 60:
+        if observed is not None:
+            for data, label, color in ((observed, "Datos originales", INK), (values, "Muestra", TEAL)):
+                points, counts = np.unique(data, return_counts=True)
+                pad = max(float(np.ptp(observed)) * .04, .1)
+                ax.step(np.r_[min(observed)-pad, points, max(observed)+pad],
+                        np.r_[0, np.cumsum(counts)/len(data), 1], where="post", label=label, color=color)
+            ax.set_ylabel("Probabilidad acumulada")
+        elif discrete and span <= 60:
             positions, counts = np.unique(values, return_counts=True)
-            ax.bar(positions, counts / len(sample), width=.72, color=TEAL, alpha=.82)
+            ax.bar(positions, counts / len(sample), width=.72, color=TEAL, alpha=.82, label="Muestra")
+            if model is not None:
+                x = np.arange(low, high + 1)
+                ax.plot(x, model.pdf(x), "o", color=INK, label="Masa teórica")
             ax.set_ylabel("Frecuencia relativa", color=INK, labelpad=7)
         else:
             # A wide discrete range uses grouped frequencies, while continuous bins use density.
@@ -459,14 +476,20 @@ class RandomNumbers:
                    color=TEAL, alpha=.52, edgecolor="white", label="Muestra")
             ax.set_ylabel("Frecuencia relativa por intervalo" if discrete else "Densidad",
                           color=INK, labelpad=7)
-            if normal is not None:
-                with np.errstate(over="ignore", invalid="ignore", divide="ignore"):
-                    mean, sigma = normal.mean(), normal.std()
-                    x = np.linspace(min(low, mean - 3.4 * sigma), max(high, mean + 3.4 * sigma), 240)
-                    density = normal.pdf(x)
-                if np.all(np.isfinite(x)) and np.all(np.isfinite(density)):
-                    ax.plot(x, density, color="#103746", linewidth=2.2, label="Normal teórica")
-                    ax.legend(frameon=False, labelcolor=INK, loc="upper right", fontsize=9)
+            if model is not None and discrete:
+                lower = np.ceil(edges[:-1]) - 1
+                upper = np.ceil(edges[1:]) - 1
+                upper[-1] = np.floor(edges[-1])
+                masses = np.where(model.cdf(lower) > .5, model.sf(lower)-model.sf(upper),
+                                  model.cdf(upper)-model.cdf(lower))
+                ax.plot(edges[:-1] + np.diff(edges)/2, masses, "o", color=INK, label="Masa por intervalo")
+            elif model is not None:
+                x = np.linspace(min(low, model.ppf(.01)), max(high, model.ppf(.99)), 480)
+                with np.errstate(all="ignore"):
+                    density = model.pdf(x)
+                ax.plot(x, np.where(np.isfinite(density), density, np.nan), color=INK, label="Densidad teórica")
+        if model is not None or observed is not None:
+            ax.legend(frameon=False, loc="upper right", fontsize=9)
         self.sample_canvas.draw_idle()
 
     def _sample_plot_message(self, message):
