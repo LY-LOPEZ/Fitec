@@ -42,7 +42,7 @@ class FitecAssistant:
         body.pack(fill="both", expand=True, padx=14, pady=14)
         heading = ttk.Frame(body, style="Panel.TFrame")
         heading.pack(fill="x", pady=(0, 9))
-        ttk.Label(heading, text="Asistente IA", image=self.app.icons["assistant"], compound="left",
+        ttk.Label(heading, text="Asistente FITEC", image=self.app.icons["assistant"], compound="left",
                   style="Section.TLabel").pack(anchor="w")
         ttk.Label(heading, text="Interpreta un ejercicio, entiende un resultado y reproduce el método del libro.",
                   style="Help.TLabel").pack(anchor="w", pady=(2, 0))
@@ -159,7 +159,8 @@ class FitecAssistant:
 
     def configure_ai(self):
         key = simpledialog.askstring(
-            "Configurar IA", "Pega tu clave API de OpenAI. FITEC la usa durante esta sesión.\n"
+            "FITEC · Configurar IA", "Pega la clave API de tu proyecto.\n"
+            "FITEC la usa durante esta sesión.\n"
             "Solo se envía el enunciado o el cálculo que elijas consultar en línea.\n"
             "Deja el campo vacío para desconectar la IA.",
             show="*", parent=self.parent.winfo_toplevel(),
@@ -169,8 +170,8 @@ class FitecAssistant:
             self._sync_online()
 
     def _sync_online(self):
-        self.connection.set("Consultando OpenAI…" if self.busy else
-                            "IA en línea disponible" if self.key else "Guía local")
+        self.connection.set("FITEC consultando en línea…" if self.busy else
+                            "Clave configurada" if self.key else "Guía local")
         for button in self.online_buttons:
             button.state(["!disabled" if self.key and not self.busy else "disabled"])
 
@@ -179,7 +180,7 @@ class FitecAssistant:
             return
         self.busy = True
         self._sync_online()
-        self._display(output, "Consultando a OpenAI…")
+        self._display(output, "FITEC está consultando en línea…")
 
         def worker():
             try:
@@ -241,7 +242,7 @@ class FitecAssistant:
         key = self.key
         models = {name: spec[2] for name, (spec, _) in self.catalog.items()}
         self._ask(lambda: online_suggestion(key, text, models),
-                  lambda result: self._present(result, text, "OpenAI"), self.exercise_output)
+                  lambda result: self._present(result, text, "FITEC en línea"), self.exercise_output)
 
     def _present(self, suggestion, text, origin):
         if text != self._exercise_text():
@@ -394,7 +395,7 @@ class FitecAssistant:
         if self.facts:
             key, facts = self.key, self.facts
             self._ask(lambda: online_explanation(key, facts),
-                      lambda text: self._display(self.result_output, facts + "\n\nExplicación de la IA\n" + text),
+                      lambda text: self._display(self.result_output, facts + "\n\nExplicación de FITEC\n" + text),
                       self.result_output)
 
     def refresh_guide(self):

@@ -12,6 +12,8 @@ from fitec_assistant import FitecAssistant
 from fitec_demo import Galton, NormalSurface
 from fitec_icons import make_icons
 from fitec_menus import FitecMenus
+from fitec_queues import QueueSimulator
+from fitec_theme import FitecTheme, NIGHT, is_night
 
 
 PAPER = "#edf3f5"
@@ -25,7 +27,8 @@ ASSETS = Path(__file__).with_name("probviz") / "assets"
 WORKSPACES = (
     ("distributions", "Distribuciones", "model"),
     ("random", "Números aleatorios", "dice"),
-    ("assistant", "Asistente IA", "assistant"),
+    ("assistant", "Asistente FITEC", "assistant"),
+    ("queues", "Simulador de filas", "team"),
 )
 
 
@@ -49,8 +52,10 @@ class FitecTools:
         root.configure(background=PAPER)
         self.icons = make_icons(root)
         symbol_size = max(20, round(root.winfo_fpixels("18p")))
-        self.nav_icons = {}
+        self.nav_icons = make_icons(root, color="#d0ebeb", names=("chart", "team"), size=symbol_size)
         for _, _, icon in WORKSPACES:
+            if icon in self.nav_icons:
+                continue
             with Image.open(ASSETS / f"symbol-{icon}.png") as source:
                 glyph = source.resize((symbol_size, symbol_size), Image.Resampling.LANCZOS)
             self.nav_icons[icon] = ImageTk.PhotoImage(glyph, master=root)
@@ -83,16 +88,13 @@ class FitecTools:
         tk.Frame(headings, background=BANNER_TEXT, width=1, height=23).pack(side="left", padx=12)
         tk.Label(headings, text="Simulación de Sistemas", background=SIDEBAR, foreground=BANNER_TEXT,
                  font=("Inter", 11), borderwidth=0).pack(side="left")
-        radius = max(6, round(root.winfo_fpixels("7p")))
-        disk = Image.new("RGB", (8 * radius, 8 * radius), PAPER)
-        ImageDraw.Draw(disk).ellipse((0, 0, disk.width - 1, disk.height - 1), fill=SIDEBAR)
-        disk = disk.resize((2 * radius, 2 * radius), Image.Resampling.LANCZOS)
+        self.corner_radius = max(6, round(root.winfo_fpixels("7p")))
+        self.banner_corners = []
         for anchor, x, y in (("nw", 0, 0), ("ne", 1, 0), ("sw", 0, 1), ("se", 1, 1)):
-            tile = disk.crop((x * radius, y * radius, (x + 1) * radius, (y + 1) * radius))
             corner = tk.Label(banner, borderwidth=0, highlightthickness=0, padx=0, pady=0)
-            corner.image = ImageTk.PhotoImage(tile, master=root)
-            corner.configure(image=corner.image)
             corner.place(relx=x, rely=y, anchor=anchor)
+            self.banner_corners.append((corner, x, y))
+        self._paint_banner_corners(False)
 
         self.toolbar = ttk.Frame(workspace, style="Panel.TFrame", padding=(10, 6))
         page_host = ttk.Frame(workspace)
@@ -120,6 +122,7 @@ class FitecTools:
         style.map("Graph.Toolbutton", foreground=[("disabled", "#687d84"), ("selected", "white")],
                   background=[("disabled", PAPER), ("selected", TEAL), ("active", PAPER)],
                   bordercolor=[("selected", "#96d6ce")])
+        style.configure("Surface.Graph.Toolbutton", borderwidth=0)
         style.configure("Toolbar.TButton", padding=(7, 5), font=("Inter", 9, "bold"),
                         foreground=INK, background="white", bordercolor="#d6e3e7")
         style.map("Toolbar.TButton", foreground=[("disabled", "#687d84")],
@@ -129,24 +132,52 @@ class FitecTools:
 
         self.active_view = tk.StringVar(value="distributions")
         self.toolbar_visible = True
-        for name, label, icon in WORKSPACES:
-            ttk.Radiobutton(self.sidebar, text=label, image=self.nav_icons[icon], compound="left",
-                            value=name, variable=self.active_view, style="Nav.Toolbutton",
-                            command=lambda name=name: self.select_view(name)).pack(fill="x", padx=7, pady=(7, 0))
         self.commands = {
             name: ttk.Frame(self.explorer.graph_actions if name == "distributions" else self.toolbar,
                             style="Panel.TFrame")
-            for name in self.pages
+            for name in self.pages if name != "queues"
         }
         self._build_distribution_commands(self.commands["distributions"])
         self.generator = RandomNumbers(self.pages["random"], self.commands["random"], self.icons,
                                        self.explorer.catalog, parse_parameter, parse_observations)
         self.assistant = FitecAssistant(self.pages["assistant"], self.commands["assistant"], self,
                                         parse_parameter, parse_observations)
+        self.queues = QueueSimulator(self.pages["queues"])
         self.explorer.mode.trace_add("write", self._sync_distribution_commands)
         self._sync_distribution_commands()
         self.select_view("distributions")
         self.menus = FitecMenus(root, self)
+        ttk.Button(self.sidebar, text="Ajustar distribuciones", image=self.nav_icons["chart"], compound="left",
+                   style="Nav.Toolbutton", command=self.menus.open_fit_workspace).pack(fill="x", padx=7, pady=(7, 0))
+        for name, label, icon in WORKSPACES:
+            ttk.Radiobutton(self.sidebar, text=label, image=self.nav_icons[icon], compound="left",
+                            value=name, variable=self.active_view, style="Nav.Toolbutton",
+                            command=lambda name=name: self.select_view(name)).pack(fill="x", padx=7, pady=(7, 0))
+        self.theme = FitecTheme(root)
+
+    def _paint_banner_corners(self, night):
+        radius = self.corner_radius
+        disk = Image.new("RGB", (8 * radius, 8 * radius), NIGHT.background if night else PAPER)
+        ImageDraw.Draw(disk).ellipse((0, 0, disk.width - 1, disk.height - 1),
+                                     fill=NIGHT.navigation if night else SIDEBAR)
+        disk = disk.resize((2 * radius, 2 * radius), Image.Resampling.LANCZOS)
+        for corner, x, y in self.banner_corners:
+            tile = disk.crop((x * radius, y * radius, (x + 1) * radius, (y + 1) * radius))
+            corner.image = ImageTk.PhotoImage(tile, master=corner)
+            corner.configure(image=corner.image)
+
+    def toggle_theme(self):
+        night = not self.theme.night
+        self.theme.set_night(night)
+        self.menus.update_theme_control(night)
+        self._paint_banner_corners(night)
+        self.explorer.update_plot()
+        self.generator.repaint_theme()
+        self.queues.repaint_theme()
+        workspace = self.menus.fit_workspace
+        if workspace is not None and workspace.root.winfo_exists():
+            workspace.explorer.update_plot()
+            workspace._draw_results()
 
     @staticmethod
     def _add_header_mark(root, header, filename, label, size, *, viewport=None, **placement):
@@ -205,6 +236,8 @@ class FitecTools:
         self.heading.configure(text=next(label for key, label, _ in WORKSPACES if key == name))
         if name == "assistant":
             self.assistant.refresh_guide()
+        if name != "queues":
+            self.queues.pause()
         self.pages[name].tkraise()
         self.set_toolbar_visible(self.toolbar_visible)
 
@@ -214,7 +247,7 @@ class FitecTools:
         for commands in self.commands.values():
             commands.pack_forget()
         self.toolbar.pack_forget()
-        if not enabled:
+        if not enabled or name not in self.commands:
             return
         if name == "distributions":
             self.commands[name].pack(fill="x")
@@ -224,11 +257,12 @@ class FitecTools:
 
     def session_settings(self):
         return {"view": self.active_view.get(), "explorer": self.explorer.session_settings(),
-                "generator": self.generator.session_settings()}
+                "generator": self.generator.session_settings(), "queues": self.queues.session_settings()}
 
     def restore_session(self, settings):
         self.explorer.restore_session(settings["explorer"])
         self.generator.restore_session(settings["generator"])
+        self.queues.restore_session(settings.get("queues"))
         self.select_view(settings["view"])
 
     def _transfer(self):
@@ -248,6 +282,7 @@ class RandomNumbers:
         self.parameters = {}
         self.sample = None
         self.sample_caption = ""
+        self.sample_model = self.sample_observed = None
         self.status = tk.StringVar(value="Sin muestra")
         self._build()
         toolbar_button(toolbar, icons, "Generar", "fit", self.generate, primary=True).pack(
@@ -394,6 +429,7 @@ class RandomNumbers:
     def _show_sample(self, sample, caption="", *, model=None, observed=None):
         self.sample = sample
         self.sample_caption = caption
+        self.sample_model, self.sample_observed = model, observed
         self.preview.delete(*self.preview.get_children())
         if sample is None:
             self.status.set("Sin muestra")
@@ -406,11 +442,22 @@ class RandomNumbers:
             button.state(["disabled" if sample is None else "!disabled"])
         self._plot_sample(sample, model=model, observed=observed)
 
+    def repaint_theme(self):
+        self._plot_sample(self.sample, model=self.sample_model, observed=self.sample_observed)
+        if hasattr(self.galton, "counts"):
+            self.galton.paint()
+
     def _plot_sample(self, sample, *, model=None, observed=None):
         from matplotlib.ticker import FuncFormatter, MaxNLocator
 
         ax = self.sample_axes
         ax.clear()
+        night = is_night(self.parent)
+        ax.figure.set_facecolor(NIGHT.panel if night else "white")
+        ax.set_facecolor(NIGHT.plot if night else "white")
+        text = NIGHT.text if night else INK
+        bars = NIGHT.shade if night else TEAL
+        reference = NIGHT.reference if night else INK
         if sample is None:
             self._sample_plot_message("Pulsa Generar para ver la gráfica de la muestra.")
             return
@@ -428,13 +475,13 @@ class RandomNumbers:
 
         ax.set_axis_on()
         ax.set_axisbelow(True)
-        ax.grid(axis="y", color="#dce8ec")
+        ax.grid(axis="y", color=NIGHT.grid if night else "#dce8ec")
         for spine in ("top", "right"):
             ax.spines[spine].set_visible(False)
         for spine in ("bottom", "left"):
-            ax.spines[spine].set_color("#a8bec5")
-        ax.tick_params(colors="#506671", labelsize=9, length=3)
-        ax.set_xlabel("Valor", color=INK, labelpad=7)
+            ax.spines[spine].set_color(NIGHT.border if night else "#a8bec5")
+        ax.tick_params(colors=NIGHT.muted if night else "#506671", labelsize=9, length=3)
+        ax.set_xlabel("Valor", color=text, labelpad=7)
         ax.yaxis.set_major_locator(MaxNLocator(nbins=5))
         ax.xaxis.set_major_locator(MaxNLocator(nbins=7, integer=discrete))
         formatter = FuncFormatter(lambda value, _position: f"{value:.5g}".replace(".", ","))
@@ -442,19 +489,22 @@ class RandomNumbers:
         ax.xaxis.set_major_formatter(formatter)
         bins = max(1, min(32, int(np.ceil(np.sqrt(len(sample))))))
         if observed is not None:
-            for data, label, color in ((observed, "Datos originales", INK), (values, "Muestra", TEAL)):
+            observed_curve = NIGHT.focus if night else TEAL
+            for data, label, color in ((observed, "Datos originales", reference), (values, "Muestra", observed_curve)):
                 points, counts = np.unique(data, return_counts=True)
                 pad = max(float(np.ptp(observed)) * .04, .1)
                 ax.step(np.r_[min(observed)-pad, points, max(observed)+pad],
                         np.r_[0, np.cumsum(counts)/len(data), 1], where="post", label=label, color=color)
             ax.set_ylabel("Probabilidad acumulada")
+            if night:
+                ax.yaxis.label.set_color(NIGHT.text)
         elif discrete and span <= 60:
             positions, counts = np.unique(values, return_counts=True)
-            ax.bar(positions, counts / len(sample), width=.72, color=TEAL, alpha=.82, label="Muestra")
+            ax.bar(positions, counts / len(sample), width=.72, color=bars, alpha=.82, label="Muestra")
             if model is not None:
                 x = np.arange(low, high + 1)
-                ax.plot(x, model.pdf(x), "o", color=INK, label="Masa teórica")
-            ax.set_ylabel("Frecuencia relativa", color=INK, labelpad=7)
+                ax.plot(x, model.pdf(x), "o", color=reference, label="Masa teórica")
+            ax.set_ylabel("Frecuencia relativa", color=text, labelpad=7)
         else:
             # A wide discrete range uses grouped frequencies, while continuous bins use density.
             extent = None
@@ -473,30 +523,32 @@ class RandomNumbers:
             if discrete:
                 frequencies = frequencies / len(sample)
             ax.bar(edges[:-1], frequencies, width=np.diff(edges), align="edge",
-                   color=TEAL, alpha=.52, edgecolor="white", label="Muestra")
+                   color=bars, alpha=.64 if night else .52,
+                   edgecolor=NIGHT.plot if night else "white", label="Muestra")
             ax.set_ylabel("Frecuencia relativa por intervalo" if discrete else "Densidad",
-                          color=INK, labelpad=7)
+                          color=text, labelpad=7)
             if model is not None and discrete:
                 lower = np.ceil(edges[:-1]) - 1
                 upper = np.ceil(edges[1:]) - 1
                 upper[-1] = np.floor(edges[-1])
                 masses = np.where(model.cdf(lower) > .5, model.sf(lower)-model.sf(upper),
                                   model.cdf(upper)-model.cdf(lower))
-                ax.plot(edges[:-1] + np.diff(edges)/2, masses, "o", color=INK, label="Masa por intervalo")
+                ax.plot(edges[:-1] + np.diff(edges)/2, masses, "o",
+                        color=reference, label="Masa por intervalo")
             elif model is not None:
                 x = np.linspace(min(low, model.ppf(.01)), max(high, model.ppf(.99)), 480)
                 with np.errstate(all="ignore"):
                     density = model.pdf(x)
-                ax.plot(x, np.where(np.isfinite(density), density, np.nan), color=INK, label="Densidad teórica")
+                ax.plot(x, np.where(np.isfinite(density), density, np.nan), color=reference, label="Densidad teórica")
         if model is not None or observed is not None:
-            ax.legend(frameon=False, loc="upper right", fontsize=9)
+            ax.legend(frameon=False, loc="upper right", fontsize=9, labelcolor=NIGHT.text if night else None)
         self.sample_canvas.draw_idle()
 
     def _sample_plot_message(self, message):
         ax = self.sample_axes
         ax.set_axis_off()
         ax.text(.5, .5, message, transform=ax.transAxes,
-                ha="center", va="center", color="#506671", fontsize=10)
+                ha="center", va="center", color=NIGHT.muted if is_night(self.parent) else "#506671", fontsize=10)
         self.sample_canvas.draw_idle()
 
     def session_settings(self):

@@ -75,7 +75,7 @@ fitec = "desktop_app:main"
 
 [tool.setuptools]
 py-modules = ["desktop_app", "fitec_demo", "fitec_analysis", "fitec_assistant", "fitec_icons", "fitec_menus",
-              "fitec_tools", "fitec_tutor", "fitec_workspace"]
+              "fitec_queues", "fitec_theme", "fitec_tools", "fitec_tutor", "fitec_workspace"]
 
 [tool.setuptools.package-data]
 probviz = ["assets/*.png", "assets/*.ico"]

@@ -466,7 +466,7 @@ def probability_steps(distribution, kind, first, second):
 
 def _response(key, instructions, content, schema=None):
     if not key or not key.isascii() or any(char.isspace() for char in key):
-        raise RuntimeError("La clave de OpenAI no tiene un formato válido.")
+        raise RuntimeError("FITEC necesita una clave API válida. Revísala en Configurar IA.")
     model = os.getenv("FITEC_OPENAI_MODEL", "").strip() or "gpt-5.4-mini"
     body = {"model": model, "instructions": instructions,
             "input": content, "store": False, "max_output_tokens": 2500}
@@ -480,23 +480,28 @@ def _response(key, instructions, content, schema=None):
         with urlopen(request, timeout=40) as response:
             data = json.load(response)
     except HTTPError as exc:
-        if exc.code in (401, 403):
-            raise RuntimeError("OpenAI rechazó la clave o el acceso al modelo. Revisa tu configuración.") from None
+        exc.close()
+        if exc.code == 401:
+            raise RuntimeError("FITEC no pudo autenticar la consulta (401). Revisa tu clave en Configurar IA.") from None
+        if exc.code == 403:
+            raise RuntimeError("FITEC no tiene permiso para la consulta (403). Revisa los permisos de tu proyecto.") from None
+        if exc.code == 404:
+            raise RuntimeError("FITEC no encontró el modelo (404). Revisa que tu proyecto tenga acceso al modelo configurado.") from None
         if exc.code == 429:
-            raise RuntimeError("La API alcanzó su límite de uso o no tiene saldo disponible.") from None
-        raise RuntimeError(f"OpenAI devolvió el error HTTP {exc.code}.") from None
+            raise RuntimeError("FITEC alcanzó un límite de la API (429). Revisa el saldo y los límites de uso.") from None
+        raise RuntimeError(f"FITEC recibió un error del servicio en línea (HTTP {exc.code}).") from None
     except (URLError, TimeoutError, OSError):
-        raise RuntimeError("No se pudo conectar a OpenAI. Puedes seguir con la guía local.") from None
+        raise RuntimeError("FITEC no pudo conectar con el servicio en línea. Puedes seguir con la guía local.") from None
     except (ValueError, UnicodeError):
-        raise RuntimeError("OpenAI devolvió una respuesta que FITEC no pudo leer.") from None
+        raise RuntimeError("FITEC no pudo leer la respuesta del servicio en línea.") from None
     if not isinstance(data, dict):
-        raise RuntimeError("OpenAI devolvió una respuesta que FITEC no pudo leer.")
+        raise RuntimeError("FITEC no pudo leer la respuesta del servicio en línea.")
     if data.get("status") != "completed":
-        raise RuntimeError("La IA no completó su respuesta. Prueba con un ejercicio más corto.")
+        raise RuntimeError("FITEC recibió una respuesta incompleta. Prueba con un ejercicio más corto.")
     result = "\n".join(part["text"] for item in data.get("output", []) if item.get("type") == "message"
                        for part in item.get("content", []) if part.get("type") == "output_text").strip()
     if not result:
-        raise RuntimeError("La IA no devolvió una explicación para este ejercicio.")
+        raise RuntimeError("FITEC no recibió una explicación para este ejercicio.")
     return result
 
 

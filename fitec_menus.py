@@ -7,6 +7,10 @@ from tempfile import NamedTemporaryFile
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
+from fitec_icons import make_icons
+from fitec_queues import validate_queue_settings
+from fitec_theme import NIGHT
+
 
 PAPER = "#edf3f5"
 MINT = "#dff3ef"
@@ -16,7 +20,7 @@ PROJECT_FILES = [("Proyecto FITEC", "*.fitec")]
 
 
 def validate_session(settings, catalog, generator_models):
-    if settings["view"] not in ("distributions", "random", "assistant"):
+    if settings["view"] not in ("distributions", "random", "assistant", "queues"):
         raise ValueError("La vista del proyecto no es válida.")
     explorer, generator = settings["explorer"], settings["generator"]
     mode, name = explorer["mode"], explorer["name"]
@@ -60,7 +64,7 @@ def validate_session(settings, catalog, generator_models):
         if any(not isinstance(value, str) or not math.isfinite(float(value.replace(",", ".")))
                for value in sample):
             raise ValueError("La muestra contiene valores no válidos.")
-    return settings
+    return {**settings, "queues": validate_queue_settings(settings.get("queues"))}
 
 
 class FitecMenus:
@@ -170,7 +174,8 @@ class FitecMenus:
         window = self._menu("Ventana")
         self._item(window, "Distribuciones", lambda: self.app.select_view("distributions"), "model", "Ctrl+1")
         self._item(window, "Números aleatorios", lambda: self.app.select_view("random"), "dice", "Ctrl+2")
-        self._item(window, "Asistente IA", lambda: self.app.select_view("assistant"), "assistant", "Ctrl+3")
+        self._item(window, "Asistente FITEC", lambda: self.app.select_view("assistant"), "assistant", "Ctrl+3")
+        self._item(window, "Simulador de filas", lambda: self.app.select_view("queues"), "team", "Ctrl+4")
         window.add_separator()
         self._item(window, "Maximizar / restaurar", self.toggle_maximize)
 
@@ -181,6 +186,18 @@ class FitecMenus:
         help_menu.add_separator()
         self._item(help_menu, "Acuerdo de licencia", self.license)
         self._item(help_menu, "Acerca de FITEC", self.about, "help")
+        style.configure("Theme.TButton", padding=(12, 5), font=("Inter", 9, "bold"),
+                        background="#f4f8f9", foreground=INK, width=0, borderwidth=0, relief="flat")
+        style.map("Theme.TButton", background=[("pressed", MINT), ("active", MINT), ("focus", MINT)])
+        self.night_sun = make_icons(self.root, color=NIGHT.focus, names=("sun",))["sun"]
+        self.theme_button = ttk.Button(bar, style="Theme.TButton", compound="left",
+                                      command=self.app.toggle_theme)
+        self.theme_button.pack(side="left", padx=(4, 0))
+        self.update_theme_control(False)
+
+    def update_theme_control(self, night):
+        self.theme_button.configure(text="Día" if night else "Noche",
+                                    image=self.night_sun if night else self.app.icons["moon"])
 
     @staticmethod
     def _popup(parent, prepare=None):
@@ -211,6 +228,7 @@ class FitecMenus:
             ("<Control-Key-1>", lambda: self.app.select_view("distributions")),
             ("<Control-Key-2>", lambda: self.app.select_view("random")),
             ("<Control-Key-3>", lambda: self.app.select_view("assistant")),
+            ("<Control-Key-4>", lambda: self.app.select_view("queues")),
         ):
             self.root.bind(sequence, lambda _event, action=action: self._shortcut(action))
         self.root.bind("<Control-a>", self._select_all)
@@ -300,12 +318,12 @@ class FitecMenus:
         self.status.configure(text=text)
         if self.flash_id is not None:
             self.root.after_cancel(self.flash_id)
-        self.status.configure(background=MINT if self.animate.get() else PAPER)
+        self.app.theme.update_colors(self.status, background=MINT if self.animate.get() else PAPER)
         self.flash_id = self.root.after(190, self._clear_flash) if self.animate.get() else None
 
     def _clear_flash(self):
         self.flash_id = None
-        self.status.configure(background=PAPER)
+        self.app.theme.update_colors(self.status, background=PAPER)
 
     def _toggle_status(self):
         if self.show_status.get():
@@ -500,7 +518,17 @@ class FitecMenus:
             self.fit_workspace.root.lift()
             return
         window = tk.Toplevel(self.root)
-        self.fit_workspace = FitecWorkspace(window, type(self.explorer))
+        with self.app.theme.building_window():
+            self.fit_workspace = FitecWorkspace(window, type(self.explorer),
+                                                on_use_simulation=self._open_simulation_with_fit)
+
+    def _open_simulation_with_fit(self, fit, summary):
+        self.app.queues.load_fit(fit, summary)
+        self.fit_workspace.root.withdraw()
+        self.app.select_view("queues")
+        self.root.deiconify()
+        self.root.lift()
+        self.app.queues.start_button.focus_set()
 
     def close(self):
         if self.fit_workspace and self.fit_workspace.root.winfo_exists():

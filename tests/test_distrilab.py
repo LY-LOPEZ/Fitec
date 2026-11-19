@@ -1,4 +1,5 @@
 import math
+from urllib.error import HTTPError
 
 import numpy as np
 import pytest
@@ -14,7 +15,7 @@ from desktop_app import (
     probability,
 )
 from fitec_analysis import fit_models, ks_distance
-from fitec_tutor import congruential_rows, local_suggestion, probability_steps
+from fitec_tutor import congruential_rows, local_suggestion, online_explanation, probability_steps
 from src.distributions import (
     BinomialDistribution,
     ErlangDistribution,
@@ -243,3 +244,23 @@ def test_binomial_fit_uses_known_trials():
     for invalid in (None, 0, 2, 3.5):
         with pytest.raises(ValueError, match="ensayos"):
             fit_models(values, discrete=True, trials=invalid, model_names=["binom"])
+
+
+@pytest.mark.parametrize(("status", "detail"), [
+    (401, "Configurar IA"),
+    (403, "permisos"),
+    (404, "modelo configurado"),
+    (429, "saldo"),
+    (500, "servicio en línea"),
+])
+def test_online_assistant_explains_service_errors(monkeypatch, status, detail):
+    def reject(request, timeout):
+        raise HTTPError(request.full_url, status, "Detalle privado del proveedor", None, None)
+
+    monkeypatch.setattr("fitec_tutor.urlopen", reject)
+    with pytest.raises(RuntimeError, match="^FITEC") as error:
+        online_explanation("clave-simulada", "Una prueba local de FITEC.")
+    message = str(error.value)
+    assert str(status) in message
+    assert detail in message
+    assert "Detalle privado del proveedor" not in message

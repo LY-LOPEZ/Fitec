@@ -1,6 +1,7 @@
 """Audit the desktop explorer and generator against explicit course parameterizations."""
 
 import tkinter as tk
+from tkinter import ttk
 
 import numpy as np
 import pytest
@@ -8,6 +9,7 @@ from matplotlib.colors import to_rgba
 from scipy import stats
 
 from desktop_app import CONTINUOUS, DISCRETE, TEAL, FitecApp, format_probability, parse_observations, parse_parameter, probability
+from fitec_theme import NIGHT
 from fitec_tools import FitecTools
 from fitec_tutor import congruential_rows, decimal
 
@@ -175,3 +177,34 @@ def test_galton_paths_and_exportable_sample(desktop):
     expected = (np.random.default_rng(42).random((20, 3)) < .5).sum(axis=1)
     np.testing.assert_array_equal(generator.sample, expected.astype(str))
     np.testing.assert_array_equal(board.counts, np.bincount(expected, minlength=4))
+
+
+def test_day_night_keeps_probability_and_sample(desktop):
+    explorer, generator = desktop.explorer, desktop.generator
+    explorer.graph_mode.set("Densidad")
+    explorer.select_model("Binomial", {"n": 3, "p": .5}, discrete=True, event=("entre", 1, 2))
+    desktop._transfer()
+    generator.generate()
+    sample = tuple(generator.sample)
+    generator.select_distribution("Poisson", {"lambda_param": 4})
+    button = desktop.menus.theme_button
+    day_panel = ttk.Style(desktop.theme.root).lookup("Panel.TFrame", "background")
+    day_axes = explorer.ax.get_facecolor()
+    button.invoke()
+    try:
+        assert button.cget("text") == "Día"
+        assert ttk.Style(desktop.theme.root).lookup("Panel.TFrame", "background") == NIGHT.panel
+        assert explorer.ax.get_facecolor() == to_rgba(NIGHT.plot)
+        assert explorer.result.cget("text") == "75,00 %"
+        selected = [index for index, bar in enumerate(explorer.ax.patches)
+                    if bar.get_facecolor() == to_rgba(NIGHT.focus)]
+        assert selected == [1, 2]
+        assert tuple(generator.sample) == sample
+        theory = generator.sample_axes.lines[0]
+        assert theory.get_color() == NIGHT.reference
+        np.testing.assert_allclose(theory.get_ydata(), stats.binom(3, .5).pmf(theory.get_xdata()))
+    finally:
+        button.invoke()
+    assert button.cget("text") == "Noche"
+    assert explorer.ax.get_facecolor() == day_axes
+    assert ttk.Style(desktop.theme.root).lookup("Panel.TFrame", "background") == day_panel

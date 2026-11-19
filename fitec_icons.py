@@ -42,13 +42,21 @@ ICON_PATHS = {
              ((14, 5), (16, 6), (16, 9), (14, 10)), ((15, 12), (18, 14), (18, 17))),
     "assistant": (((9, 2), (11, 7), (16, 9), (11, 11), (9, 17), (7, 11), (2, 9), (7, 7), (9, 2)),
                   ((16, 2), (16, 6)), ((14, 4), (18, 4)), ((16, 13), (16, 17)), ((14, 15), (18, 15))),
+    "moon": (((11, 2), (8, 3), (5, 5), (3, 9), (4, 13), (7, 16), (11, 17),
+              (15, 15), (17, 11), (13, 12), (10, 10), (9, 6), (11, 2)),),
+    "sun": (((10, 6), (13, 7), (14, 10), (13, 13), (10, 14), (7, 13), (6, 10), (7, 7), (10, 6)),
+            ((10, 2), (10, 4)), ((10, 16), (10, 18)), ((2, 10), (4, 10)), ((16, 10), (18, 10)),
+            ((4, 4), (5, 5)), ((15, 15), (16, 16)), ((4, 16), (5, 15)), ((15, 5), (16, 4))),
 }
 
 
-def make_icons(root, *, color=TEAL):
-    size = max(16, round(root.winfo_fpixels("15p")))
+def make_icons(root, *, color=TEAL, names=None, size=None):
+    if size is None:
+        size = max(16, round(root.winfo_fpixels("15p")))
     images = {}
     for name, paths in {**ICON_PATHS, "fit": ICON_PATHS["chart"]}.items():
+        if names is not None and name not in names:
+            continue
         image = Image.new("RGBA", (80, 80))
         draw = ImageDraw.Draw(image)
         ink = "white" if name == "fit" else color

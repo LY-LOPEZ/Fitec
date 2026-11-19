@@ -19,6 +19,7 @@ if tk is not None:
 from matplotlib.figure import Figure
 from matplotlib.ticker import FuncFormatter
 
+from fitec_theme import NIGHT, is_night
 from src.distributions import (
     BetaDistribution,
     BinomialDistribution,
@@ -768,6 +769,7 @@ class FitecApp:
         return np.unique(np.r_[grid, [limit for limit in limits if lo <= limit <= hi]])
 
     def update_plot(self):
+        self.figure.set_facecolor(NIGHT.panel if is_night(self.root) else SURFACE)
         if self._update_id is not None:
             self.root.after_cancel(self._update_id)
             self._update_id = None
@@ -902,38 +904,44 @@ class FitecApp:
             self.root.after_cancel(self._animation_id)
             self._animation_id = None
         self.ax.clear()
+        night = is_night(self.root)
+        canvas_color = NIGHT.plot if night else SURFACE
+        curve_color = NIGHT.focus if night else TEAL
+        fill_color = NIGHT.shade if night else "#a7e1d8"
+        text_color = NIGHT.text if night else TEXT
         self.ax.set_axis_on()
-        self.ax.set_facecolor(SURFACE)
-        self.ax.grid(axis="y", color=BORDER, linewidth=.8)
+        self.ax.set_facecolor(canvas_color)
+        self.ax.grid(axis="y", color=NIGHT.grid if night else BORDER, linewidth=.8)
         self.ax.set_axisbelow(True)
         for spine in ("top", "right"):
             self.ax.spines[spine].set_visible(False)
         for spine in ("left", "bottom"):
-            self.ax.spines[spine].set_color("#9fb7be")
-        self.ax.tick_params(colors=MUTED, labelsize=9)
+            self.ax.spines[spine].set_color(NIGHT.border if night else "#9fb7be")
+        self.ax.tick_params(colors=NIGHT.muted if night else MUTED, labelsize=9)
         self.ax.xaxis.set_major_formatter(FuncFormatter(lambda value, _: format_number(value, 4)))
         self.ax.yaxis.set_major_formatter(FuncFormatter(lambda value, _: format_number(value, 4)))
         first, *upper = limits
         second = upper[0] if upper else None
         finite_y = np.where(np.isfinite(y), y, np.nan)
         if style == "escalón":
-            (line,) = self.ax.step(x, finite_y, where="post", color=TEAL, linewidth=2.4)
+            (line,) = self.ax.step(x, finite_y, where="post", color=curve_color, linewidth=2.4)
         elif style == "curva":
-            (line,) = self.ax.plot(x, finite_y, color=TEAL, linewidth=2.4)
+            (line,) = self.ax.plot(x, finite_y, color=curve_color, linewidth=2.4)
         else:
             line = None
-            colors = [TEAL if self._inside_probability(int(v), kind, first, second)
-                      else "#d2e1e5" for v in x]
+            outside = NIGHT.inactive_bar if night else "#d2e1e5"
+            colors = [curve_color if self._inside_probability(int(v), kind, first, second)
+                      else outside for v in x]
             self.ax.bar(x, finite_y, width=.8, color=colors)
         if cumulative and kind != "exacta":
             lo = x[0] if kind in ("hasta", "menos") else max(x[0], first)
             hi = x[-1] if kind in ("encima", "al_menos") else min(x[-1], first if second is None else second)
             if hi > lo:
-                self.ax.axvspan(lo, hi, color="#a7e1d8", alpha=.46, linewidth=0)
+                self.ax.axvspan(lo, hi, color=fill_color, alpha=.46, linewidth=0)
         elif style == "curva" and not cumulative:
             self.ax.fill_between(x, 0, finite_y,
                                  where=self._continuous_mask(x, kind, first, second),
-                                 color="#a7e1d8", alpha=.58, linewidth=0)
+                                 color=fill_color, alpha=.58, linewidth=0)
         padding = .55 if style == "barras" else max((x[-1] - x[0]) * .015, 1e-12)
         if x[0] == x[-1]:
             padding = .5
@@ -951,8 +959,8 @@ class FitecApp:
             else:
                 top = max(1e-12, float(np.max(valid_y))) * 1.12
         self.ax.set_ylim(0, top)
-        self.ax.set_xlabel("x", color=TEXT)
-        self.ax.set_ylabel("f(x)" if ylabel == "Densidad" else ylabel, color=TEXT)
+        self.ax.set_xlabel("x", color=text_color)
+        self.ax.set_ylabel("f(x)" if ylabel == "Densidad" else ylabel, color=text_color)
         self._plot_limits.clear()
         left, right = self.ax.get_xlim()
         for field, limit in zip(("first", "second"), limits):
@@ -961,15 +969,17 @@ class FitecApp:
             marker = limit
             self._plot_limits[field] = marker
             height = np.interp(marker, x, finite_y) if style == "curva" and not cumulative else top * .96
-            self.ax.vlines(marker, 0, height, color=TEAL, linewidth=1.35, zorder=4)
+            self.ax.vlines(marker, 0, height, color=curve_color, linewidth=1.35, zorder=4)
             self.ax.plot(marker, 0, "o", clip_on=False, transform=self.ax.get_xaxis_transform(),
-                         markersize=7, markerfacecolor=SURFACE, markeredgecolor=TEAL,
+                         markersize=7, markerfacecolor=canvas_color, markeredgecolor=curve_color,
                          markeredgewidth=1.5, zorder=5)
         self._plot_data = (x, finite_y, style)
         self._tooltip = self.ax.annotate(
             "", xy=(0, 0), xytext=(10, 12), textcoords="offset points",
-            color=TEXT, fontsize=9, bbox={"facecolor": SURFACE, "edgecolor": BORDER,
-                                       "boxstyle": "round,pad=.45"}, zorder=8,
+            color=text_color, fontsize=9,
+            bbox={"facecolor": NIGHT.panel if night else SURFACE,
+                  "edgecolor": NIGHT.border if night else BORDER,
+                  "boxstyle": "round,pad=.45"}, zorder=8,
         )
         self._tooltip.set_visible(False)
         plot_style = (self.mode.get(), self.distribution.get(), style, cumulative)

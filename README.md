@@ -10,9 +10,13 @@ Aplicación de escritorio para Windows creada para la materia de **Simulación d
 
 | Sección | Funciones |
 | --- | --- |
+| **Ajustar distribuciones** | Pega datos o importa un CSV, compara los modelos ajustados y utiliza el modelo elegido para calcular probabilidades o simular una fila. |
 | **Distribuciones** | Elige un modelo, edita sus parámetros y alterna entre densidad, masa y acumulada. Consulta probabilidades de cola, de intervalo y de valores exactos para modelos discretos. Puedes mover los límites sobre la gráfica y ver la zona o las barras incluidas. |
 | **Números aleatorios** | Genera una muestra indicando la distribución, la cantidad y la semilla. Consulta sus valores en la tabla o en la gráfica, cópialos o guárdalos en CSV. Al generar una muestra Normal, el histograma también muestra la curva teórica. |
-| **Asistente IA** | Interpreta ejercicios compatibles con la guía local, explica el cálculo actual y enseña el método congruencial lineal mixto paso a paso. Las consultas en línea son opcionales y requieren una clave API de OpenAI. |
+| **Asistente FITEC** | Interpreta ejercicios compatibles con la guía local, explica el cálculo actual y enseña el método congruencial lineal mixto paso a paso. Las consultas en línea son opcionales y requieren una clave API de un proyecto en OpenAI Platform. |
+| **Simulador de filas** | Compara dos filas con las mismas llegadas y el mismo tiempo medio de atención. En **Modelo elegido → Usar en simulación** puedes usar un ajuste con duraciones en minutos como escenario de atención. |
+
+El botón de luna junto a **Ayuda** activa el tema Noche. El sol vuelve al tema Día. En Noche, FITEC usa ejes claros, turquesa para la distribución y ámbar para las referencias teóricas de las muestras.
 
 Desde **Archivo** puedes guardar un proyecto `.fitec` con sus parámetros y la muestra, y abrirlo más adelante.
 

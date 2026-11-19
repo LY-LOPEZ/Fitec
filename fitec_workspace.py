@@ -23,6 +23,7 @@ from fitec_analysis import (
     BOOTSTRAP_REPETITIONS, CONTINUOUS_MODELS, DISCRETE_MODELS, MODELS,
     FitResult, fit_models,
 )
+from fitec_theme import NIGHT, is_night
 
 
 PAGE_SIZE = 200
@@ -139,8 +140,9 @@ class DataTable:
 
 
 class FitecWorkspace:
-    def __init__(self, root, explorer_type):
+    def __init__(self, root, explorer_type, *, on_use_simulation=None):
         self.root = root
+        self.on_use_simulation = on_use_simulation
         width = min(1200, root.winfo_screenwidth() - 48)
         height = min(670, root.winfo_screenheight() - 108)
         root.geometry(f"{width}x{height}")
@@ -226,9 +228,13 @@ class FitecWorkspace:
         self._button(header, "Volver a ajustes", "back", lambda: self.notebook.select(self.results_tab)).pack(
             side="right", padx=(6, 0))
         self._button(header, "Generar muestra", "model", self.generator).pack(side="right")
+        if self.on_use_simulation is not None:
+            self._button(header, "Usar en simulación", "team", self.use_in_simulation).pack(
+                side="right", padx=(0, 6))
         self.model_title = ttk.Label(header, style="Section.TLabel")
         self.model_title.pack(anchor="w")
-        self.model_detail = ttk.Label(header, style="Help.TLabel", wraplength=550)
+        self.model_detail = ttk.Label(header, style="Help.TLabel",
+                                      wraplength=420 if self.on_use_simulation else 550)
         self.model_detail.pack(anchor="w", pady=(3, 0))
         host = ttk.Frame(self.model_tab)
         host.pack(fill="both", expand=True)
@@ -712,13 +718,17 @@ class FitecWorkspace:
     def _draw_results(self):
         ax = self.result_axes
         ax.clear()
+        night = is_night(self.root)
+        self.result_figure.set_facecolor(NIGHT.panel if night else "white")
+        ax.set_facecolor(NIGHT.plot if night else "white")
+        reference = NIGHT.reference if night else TEAL
         self.plot_ready = False
         try:
             values = self.table.values(self._current_column())
         except ValueError:
             ax.set_axis_off()
             ax.text(.5, .5, "Carga una columna numérica para ver su gráfica.", ha="center", va="center",
-                    transform=ax.transAxes)
+                    transform=ax.transAxes, color=NIGHT.muted if night else "black")
         else:
             fit = self._selected_fit()
             x, frequencies = np.unique(values, return_counts=True)
@@ -728,17 +738,20 @@ class FitecWorkspace:
             low, high = x[0] - span * .08, x[-1] + span * .08
             if self.chart_kind.get() == "Acumulada":
                 ax.step(np.r_[low, x, high], np.r_[0, np.cumsum(frequencies) / len(values), 1],
-                        where="post", color="#586c79", linewidth=2, label="Empírica")
+                        where="post", color=NIGHT.focus if night else "#586c79", linewidth=2, label="Empírica")
                 ax.set_ylabel("Probabilidad acumulada")
             elif discrete and len(x) <= 250:
-                ax.bar(x, frequencies / len(values), width=.78, color="#afded8", label="Observada")
+                ax.bar(x, frequencies / len(values), width=.78,
+                       color=NIGHT.shade if night else "#afded8", label="Observada")
                 ax.set_ylabel("Frecuencia relativa")
             elif discrete:
-                ax.plot(x, frequencies / len(values), ".", color="#72998f", label="Observada")
+                ax.plot(x, frequencies / len(values), ".", color=NIGHT.focus if night else "#72998f",
+                        label="Observada")
                 ax.set_ylabel("Frecuencia relativa")
             else:
                 bins = min(60, max(5, int(np.sqrt(len(values)))))
-                ax.hist(values, bins=bins, density=True, color="#afded8", edgecolor="white", label="Observada")
+                ax.hist(values, bins=bins, density=True, color=NIGHT.shade if night else "#afded8",
+                        edgecolor=NIGHT.plot if night else "white", label="Observada")
                 ax.set_ylabel("Densidad")
             if fit:
                 frozen = fit.frozen()
@@ -746,23 +759,30 @@ class FitecWorkspace:
                     if discrete:
                         grid = (np.arange(math.floor(low), math.ceil(high) + 1)
                                 if high - low < 500 else np.unique(np.r_[low, x - 1, x, high]))
-                        ax.step(grid, frozen.cdf(grid), where="post", color=TEAL, linewidth=2, label=fit.candidate.label)
+                        ax.step(grid, frozen.cdf(grid), where="post", color=reference,
+                                linewidth=2, label=fit.candidate.label)
                     else:
                         grid = np.linspace(low, high, 500)
-                        ax.plot(grid, frozen.cdf(grid), color=TEAL, linewidth=2, label=fit.candidate.label)
+                        ax.plot(grid, frozen.cdf(grid), color=reference, linewidth=2, label=fit.candidate.label)
                 elif discrete:
                     grid = np.arange(math.floor(low), math.ceil(high) + 1) if high - low < 500 else x
-                    ax.plot(grid, frozen.pmf(grid), "o", color=TEAL, markersize=4, label=fit.candidate.label)
+                    ax.plot(grid, frozen.pmf(grid), "o", color=reference, markersize=4, label=fit.candidate.label)
                 else:
                     grid = np.linspace(low, high, 500)
                     density = frozen.pdf(grid)
                     ax.plot(grid, np.where(np.isfinite(density), density, np.nan),
-                            color=TEAL, linewidth=2, label=fit.candidate.label)
+                            color=reference, linewidth=2, label=fit.candidate.label)
             ax.set_xlabel(self.table.headers[self._current_column()])
             ax.set_axis_on()
             ax.set_axisbelow(True)
-            ax.grid(axis="y", color="#d6e3e7")
-            ax.legend(frameon=False)
+            ax.grid(axis="y", color=NIGHT.grid if night else "#d6e3e7")
+            if night:
+                ax.tick_params(colors=NIGHT.muted)
+                ax.xaxis.label.set_color(NIGHT.text)
+                ax.yaxis.label.set_color(NIGHT.text)
+                for spine in ax.spines.values():
+                    spine.set_color(NIGHT.border)
+            ax.legend(frameon=False, labelcolor=NIGHT.text if night else None)
             for axis in (ax.xaxis, ax.yaxis):
                 axis.set_major_formatter(FuncFormatter(lambda value, _: decimal(value)))
             self.plot_ready = True
@@ -921,6 +941,14 @@ class FitecWorkspace:
     def generator(self):
         if self.loaded_model:
             SampleDialog(self, self.loaded_model[2])
+
+    def use_in_simulation(self):
+        if self.loaded_model and self.on_use_simulation is not None:
+            fit = self.loaded_model[2]
+            try:
+                self.on_use_simulation(fit, self._parameter_summary(fit))
+            except ValueError as exc:
+                self._error(exc)
 
     def close(self):
         if self.job is not None:

@@ -3,9 +3,15 @@ import tkinter as tk
 from tkinter import ttk
 
 import numpy as np
+from matplotlib import rc_context
+from matplotlib.colors import LinearSegmentedColormap
+from matplotlib.ticker import MaxNLocator
 from scipy.stats import binom, norm
 
+from fitec_theme import NIGHT, is_night
+
 TEAL = "#087d77"
+NIGHT_SURFACE = LinearSegmentedColormap.from_list("fitec-night", ["#234f50", "#43968e", "#9fe0cf"])
 
 
 class NormalSurface:
@@ -13,7 +19,7 @@ class NormalSurface:
         self.e = explorer
         self.axes = None
         self.timer = None
-        self.button = ttk.Button(parent, text="Explorar en 3D", command=self.toggle)
+        self.button = ttk.Button(parent, text="Explorar en 3D", style="Surface.Graph.Toolbutton", command=self.toggle)
         self.button.pack(side="left", padx=5)
         self.scale = ttk.Scale(parent, length=85, command=self.slide)
         self.original = explorer.ax.get_position().frozen()
@@ -30,12 +36,17 @@ class NormalSurface:
         self.scale.configure(from_=sigma / 2, to=sigma * 2)
         self.scale.set(sigma)
         self.scale.pack(side="left")
-        self.axes = self.e.figure.add_axes([.02, .32, .96, .67], projection="3d")
-        self.axes.set_box_aspect((2.2, 1, .8))
+        self._build_axes(is_night(self.e.root))
         self.e.ax.set_position([.12, .13, .84, .16])
         self.button.configure(text="Volver a 2D")
         self.draw()
         self.tilt(0)
+
+    def _build_axes(self, night):
+        self.night = night
+        with rc_context({"grid.color": NIGHT.grid, "grid.linewidth": .65} if night else {}):
+            self.axes = self.e.figure.add_axes([.02, .32, .96, .67], projection="3d")
+        self.axes.set_box_aspect((2.2, 1, .8))
 
     def slide(self, value):
         if self.axes is not None:
@@ -75,10 +86,25 @@ class NormalSurface:
             self.scale.set(sigma)
         xs = np.linspace(mu - 4 * hi, mu + 4 * hi, 121)
         x, y = np.meshgrid(xs, np.linspace(lo, hi, 35))
+        night = is_night(self.e.root)
+        if night != self.night:
+            view = self.axes.elev, self.axes.azim, self.axes.roll
+            self.axes.remove()
+            self._build_axes(night)
+            self.axes.view_init(*view)
         ax = self.axes
         ax.clear()
-        ax.plot_surface(x, y, norm.pdf(x, mu, y), cmap="GnBu", alpha=.65, linewidth=0)
-        ax.plot(xs, np.full_like(xs, sigma), norm.pdf(xs, mu, sigma), color="#034f50", lw=3)
+        if night:
+            ax.set_facecolor(NIGHT.panel)
+            for axis in (ax.xaxis, ax.yaxis, ax.zaxis):
+                axis.set_pane_color(NIGHT.plot)
+                axis.label.set_color(NIGHT.text)
+                axis.line.set_color(NIGHT.border)
+                axis.set_major_locator(MaxNLocator(nbins=4))
+            ax.tick_params(colors=NIGHT.muted)
+        ax.plot_surface(x, y, norm.pdf(x, mu, y), cmap=NIGHT_SURFACE if night else "GnBu", alpha=.65, linewidth=0)
+        ax.plot(xs, np.full_like(xs, sigma), norm.pdf(xs, mu, sigma),
+                color=NIGHT.reference if night else "#034f50", lw=3)
         ax.set(xlabel="x", ylabel="σ", zlabel="Densidad")
         self.e.canvas.draw_idle()
 
@@ -178,6 +204,7 @@ class Galton:
 
     def paint(self):
         c = self.canvas
+        night = is_night(self.frame)
         w, h = max(1, c.winfo_width()), max(1, c.winfo_height())
         c.delete("all")
         self.dx = dx = min(w / (self.n + 2), 85)
@@ -185,16 +212,18 @@ class Galton:
         for row in range(self.n):
             for col in range(row + 1):
                 x, y = w/2 + (col - row/2)*dx, 15 + (row + .5)*dy
-                c.create_oval(x-3,y-3,x+3,y+3,fill="#76959e",outline="")
+                c.create_oval(x-3,y-3,x+3,y+3,fill=NIGHT.muted if night else "#76959e",outline="")
         x, y = w/2+(self.right-self.step/2)*dx,15+self.step*dy
-        c.create_oval(x-6,y-6,x+6,y+6,fill="#e68137",outline="")
+        c.create_oval(x-6,y-6,x+6,y+6,fill=NIGHT.reference if night else "#e68137",outline="")
         total = int(self.counts.sum())
         for k, count in enumerate(self.counts):
             x = w/2 + (k-self.n/2)*dx
             base = h*.91
+            selected = NIGHT.focus if night else TEAL
+            unselected = NIGHT.inactive_bar if night else "#9bb4ba"
             c.create_rectangle(x-dx*.43,base-max(4,h*.20*count/max(1,self.counts.max())),
-                               x+dx*.43,base,fill=TEAL if k in self.selected else "#9bb4ba",outline="")
-            c.create_text(x,base+10,text=str(k))
+                               x+dx*.43,base,fill=selected if k in self.selected else unselected,outline="")
+            c.create_text(x,base+10,text=str(k),fill=NIGHT.text if night else "black")
         keys = sorted(self.selected)
         theory = sum(binom.pmf(keys,self.n,self.p))
         observed = f"{100*self.counts[keys].sum()/total:.2f} %" if total else "—"
