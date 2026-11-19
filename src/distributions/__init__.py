@@ -12,6 +12,7 @@ from .continuous import (
     LognormalDistribution,
     NormalDistribution,
     StudentTDistribution,
+    TriangularDistribution,
     UniformDistribution,
     WeibullDistribution,
 )
@@ -57,6 +58,7 @@ __all__ = [
     "ErlangDistribution",
     "FisherFDistribution",
     "UniformDistribution",
+    "TriangularDistribution",
     "BetaDistribution",
     "GammaDistribution",
     "ChiSquareDistribution",

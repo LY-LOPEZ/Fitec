@@ -10,13 +10,21 @@ Aplicación de escritorio para Windows creada para la materia de **Simulación d
 
 | Sección | Funciones |
 | --- | --- |
-| **Ajustar distribuciones** | Pega datos o importa un CSV, compara los modelos ajustados y utiliza el modelo elegido para calcular probabilidades o simular una fila. |
+| **Ajustar distribuciones** | Importa CSV, TSV o libros de Excel. Crea y edita columnas, consulta estadística descriptiva, ajusta una columna o todas las válidas y utiliza el modelo elegido para calcular probabilidades, cuantiles o simular una fila. |
 | **Distribuciones** | Elige un modelo, edita sus parámetros y alterna entre densidad, masa y acumulada. Consulta probabilidades de cola, de intervalo y de valores exactos para modelos discretos. Puedes mover los límites sobre la gráfica y ver la zona o las barras incluidas. |
 | **Números aleatorios** | Genera una muestra indicando la distribución, la cantidad y la semilla. Consulta sus valores en la tabla o en la gráfica, cópialos o guárdalos en CSV. Al generar una muestra Normal, el histograma también muestra la curva teórica. |
 | **Asistente FITEC** | Interpreta ejercicios compatibles con la guía local, explica el cálculo actual y enseña el método congruencial lineal mixto paso a paso. Las consultas en línea son opcionales y requieren una clave API de un proyecto en OpenAI Platform. |
 | **Simulador de filas** | Compara dos filas con las mismas llegadas y el mismo tiempo medio de atención. En **Modelo elegido → Usar en simulación** puedes usar un ajuste con duraciones en minutos como escenario de atención. |
 
 El botón de luna junto a **Ayuda** activa el tema Noche. El sol vuelve al tema Día. En Noche, FITEC usa ejes claros, turquesa para la distribución y ámbar para las referencias teóricas de las muestras.
+
+## Analizar datos de varias columnas
+
+Desde **Ajustar distribuciones → Datos**, pulsa **Añadir columna** para crear variables. **Importar datos** admite CSV, TSV y libros `.xlsx` o `.xlsm`, con una tabla por hoja. FITEC lee los valores de las fórmulas guardados en el libro. En Windows, **Archivo → Importar selección de Excel…** lee el rango que tengas seleccionado en Excel de escritorio.
+
+En **Estadística** puedes revisar los valores numéricos, celdas vacías, texto, media, mediana, cuartiles y dispersión muestral de cada columna. **Ajustar todas** analiza cada columna con sus propios datos. En **Ajustes**, alterna entre KS, Anderson–Darling y chi-cuadrado y utiliza las vistas de histograma, acumulada, P–P, Q–Q y diferencia acumulada.
+
+**Archivo → Exportar proyecto a Excel…** guarda las tablas, la estadística descriptiva y los ajustes en un libro nuevo. También puedes generar una muestra desde **Modelo elegido** y guardarla en Excel.
 
 Desde **Archivo** puedes guardar un proyecto `.fitec` con sus parámetros y la muestra, y abrirlo más adelante.
 
@@ -34,7 +42,7 @@ Si ya tienes una copia de **`FITEC.exe`**, ábrela con doble clic. Para generar 
 powershell -ExecutionPolicy Bypass -File .\build_windows.ps1
 ```
 
-El script instala las dependencias en un entorno virtual y genera **`dist\FITEC.exe`**. La instalación de dependencias requiere conexión a Internet.
+El script instala las dependencias en un entorno virtual y genera **`dist\versionN\FITEC.exe`** en la siguiente carpeta numerada. La instalación de dependencias requiere conexión a Internet.
 
 También puedes ejecutar la aplicación desde el código:
 

@@ -10,8 +10,10 @@ from PIL import Image, ImageDraw, ImageTk
 
 from fitec_assistant import FitecAssistant
 from fitec_demo import Galton, NormalSurface
-from fitec_icons import make_icons
+from fitec_icons import ASSETS, InterfaceIcon, add_header_mark, add_usfx_mark, make_icons
+from fitec_labels import model_display_name, translate_parameter_text
 from fitec_menus import FitecMenus
+from fitec_plotting import DistinctTicks, curve_grid, interval_masses
 from fitec_queues import QueueSimulator
 from fitec_theme import FitecTheme, NIGHT, is_night
 
@@ -23,7 +25,6 @@ SIDEBAR = "#102f3d"
 BANNER_TEXT = "#c9e1e5"
 TEAL = "#087d77"
 PREVIEW_ROWS = 200
-ASSETS = Path(__file__).with_name("probviz") / "assets"
 WORKSPACES = (
     ("distributions", "Distribuciones", "model"),
     ("random", "Números aleatorios", "dice"),
@@ -57,8 +58,8 @@ class FitecTools:
             if icon in self.nav_icons:
                 continue
             with Image.open(ASSETS / f"symbol-{icon}.png") as source:
-                glyph = source.resize((symbol_size, symbol_size), Image.Resampling.LANCZOS)
-            self.nav_icons[icon] = ImageTk.PhotoImage(glyph, master=root)
+                glyph = source.convert("RGBA")
+            self.nav_icons[icon] = InterfaceIcon(root, glyph, (symbol_size, symbol_size))
 
         self.content = tk.Frame(root, background=PAPER)
         self.content.pack(fill="both", expand=True)
@@ -66,20 +67,15 @@ class FitecTools:
         self.sidebar.pack(side="left", fill="y")
         brand = tk.Frame(self.sidebar, background=SIDEBAR)
         brand.pack(fill="x")
-        self._add_header_mark(root, brand, "symbol-brand.png", "", "29p",
-                              side="left", padx=(14, 4), pady=16)
+        add_header_mark(brand, "symbol-brand.png", "", "29p", side="left", padx=(14, 4), pady=16)
         tk.Label(brand, text="FI-TEC", background=SIDEBAR, foreground="white",
                  font=("Inter", 20, "bold")).pack(side="left", padx=(0, 12))
         workspace = tk.Frame(self.content, background=PAPER)
         workspace.pack(side="left", fill="both", expand=True)
         banner = tk.Frame(workspace, background=SIDEBAR)
         banner.pack(fill="x", padx=12)
-        tk.Label(banner, text="USFX", background=SIDEBAR, foreground="white",
-                 font=("Inter", 18, "bold")).pack(side="right", padx=(0, 14))
-        self._add_header_mark(root, banner, "usfx.png", "Escudo de la USFX", "37p",
-                              side="right", padx=(8, 8), pady=6)
-        self._add_header_mark(root, banner, "fitec-blender.png", "", "41p",
-                              side="right", padx=(4, 8))
+        add_usfx_mark(banner)
+        add_header_mark(banner, "fitec-blender.png", "", "41p", side="right", padx=(4, 8))
         headings = tk.Frame(banner, background=SIDEBAR)
         headings.pack(side="left", padx=18, pady=9)
         self.heading = tk.Label(headings, background=SIDEBAR, foreground="white",
@@ -178,32 +174,6 @@ class FitecTools:
         if workspace is not None and workspace.root.winfo_exists():
             workspace.explorer.update_plot()
             workspace._draw_results()
-
-    @staticmethod
-    def _add_header_mark(root, header, filename, label, size, *, viewport=None, **placement):
-        path = ASSETS / filename
-        badge = tk.Label(header, text=label, background=header.cget("background"), foreground="white",
-                         font=("Inter", 12, "bold"), borderwidth=0)
-        try:
-            with Image.open(path) as source:
-                logo = source.convert("RGBA")
-                if viewport:
-                    left, top, right, bottom = viewport
-                    bounds = (round(left * logo.width), round(top * logo.height),
-                              round(right * logo.width), round(bottom * logo.height))
-                else:
-                    bounds = logo.getbbox()
-                if bounds:
-                    logo = logo.crop(bounds)
-                height = max(1, round(root.winfo_fpixels(size)))
-                width = max(1, round(logo.width * height / logo.height))
-                resampling = getattr(Image, "Resampling", Image).LANCZOS
-                logo = logo.resize((width, height), resampling)
-            badge.logo_image = ImageTk.PhotoImage(logo, master=root)
-            badge.configure(image=badge.logo_image)
-        except OSError:
-            pass
-        badge.pack(**placement)
 
     def _build_distribution_commands(self, parent):
         self.density_button = ttk.Radiobutton(
@@ -307,10 +277,12 @@ class RandomNumbers:
         controls.grid(row=0, column=0, sticky="nsew", padx=(0, 12))
         ttk.Label(controls, text="Configuración", style="Section.TLabel").pack(anchor="w")
         ttk.Label(controls, text="Distribución").pack(anchor="w", pady=(14, 4))
-        picker = ttk.Combobox(controls, textvariable=self.name, width=22, state="readonly",
-                              values=(*self.models, "Empírica"))
-        picker.pack(fill="x")
-        picker.bind("<<ComboboxSelected>>", lambda _event: self.select_distribution(self.name.get()))
+        models = (*self.models, "Empírica")
+        self.distribution_picker = ttk.Combobox(controls, width=22, state="readonly",
+                                                 values=tuple(map(model_display_name, models)))
+        self.distribution_picker.pack(fill="x")
+        self.distribution_picker.bind("<<ComboboxSelected>>",
+                                      lambda event: self.select_distribution(models[event.widget.current()]))
         ttk.Separator(controls).pack(fill="x", pady=(12, 4))
         self.parameter_box = ttk.Frame(controls, style="Panel.TFrame")
         self.parameter_box.pack(fill="x")
@@ -373,6 +345,7 @@ class RandomNumbers:
 
     def select_distribution(self, name, parameters=None, observations=""):
         self.name.set(name)
+        self.distribution_picker.set(model_display_name(name))
         self.error.configure(text="")
         self.parameters.clear()
         for child in self.parameter_box.winfo_children():
@@ -388,7 +361,7 @@ class RandomNumbers:
         _, defaults, labels = self.models[name]
         for key, default in defaults.items():
             value = (parameters or {}).get(key, str(default).replace(".", ","))
-            var = tk.StringVar(value=value)
+            var = tk.StringVar(value=translate_parameter_text(name, key, value))
             self.parameters[key] = var
             ttk.Label(self.parameter_box, text=labels[key], wraplength=245).pack(anchor="w", pady=(7, 3))
             ttk.Entry(self.parameter_box, textvariable=var).pack(fill="x")
@@ -412,7 +385,7 @@ class RandomNumbers:
                 discrete = bool(np.all(observed == np.floor(observed)))
             else:
                 factory = self.models[name][0]
-                parameters = {key: self.parse_parameter(name, key, var.get())
+                parameters = {key: self.parse_parameter(name, key, translate_parameter_text(name, key, var.get()))
                               for key, var in self.parameters.items()}
                 model = factory(**parameters)
                 values = model.rvs(size=count, random_state=seed)
@@ -424,7 +397,8 @@ class RandomNumbers:
             return
 
         sample = [str(int(value)) if discrete else repr(float(value)).replace(".", ",") for value in values]
-        self._show_sample(sample, f"{name} · {count} valores · Semilla {seed}", model=model, observed=observed)
+        self._show_sample(sample, f"{model_display_name(name)} · {count} valores · Semilla {seed}",
+                          model=model, observed=observed)
 
     def _show_sample(self, sample, caption="", *, model=None, observed=None):
         self.sample = sample
@@ -448,7 +422,7 @@ class RandomNumbers:
             self.galton.paint()
 
     def _plot_sample(self, sample, *, model=None, observed=None):
-        from matplotlib.ticker import FuncFormatter, MaxNLocator
+        from matplotlib.ticker import MaxNLocator
 
         ax = self.sample_axes
         ax.clear()
@@ -484,9 +458,8 @@ class RandomNumbers:
         ax.set_xlabel("Valor", color=text, labelpad=7)
         ax.yaxis.set_major_locator(MaxNLocator(nbins=5))
         ax.xaxis.set_major_locator(MaxNLocator(nbins=7, integer=discrete))
-        formatter = FuncFormatter(lambda value, _position: f"{value:.5g}".replace(".", ","))
-        ax.yaxis.set_major_formatter(formatter)
-        ax.xaxis.set_major_formatter(formatter)
+        ax.yaxis.set_major_formatter(DistinctTicks())
+        ax.xaxis.set_major_formatter(DistinctTicks())
         bins = max(1, min(32, int(np.ceil(np.sqrt(len(sample))))))
         if observed is not None:
             observed_curve = NIGHT.focus if night else TEAL
@@ -528,15 +501,14 @@ class RandomNumbers:
             ax.set_ylabel("Frecuencia relativa por intervalo" if discrete else "Densidad",
                           color=text, labelpad=7)
             if model is not None and discrete:
-                lower = np.ceil(edges[:-1]) - 1
+                lower = np.ceil(edges[:-1])
                 upper = np.ceil(edges[1:]) - 1
                 upper[-1] = np.floor(edges[-1])
-                masses = np.where(model.cdf(lower) > .5, model.sf(lower)-model.sf(upper),
-                                  model.cdf(upper)-model.cdf(lower))
+                masses = interval_masses(model, lower, upper)
                 ax.plot(edges[:-1] + np.diff(edges)/2, masses, "o",
                         color=reference, label="Masa por intervalo")
             elif model is not None:
-                x = np.linspace(min(low, model.ppf(.01)), max(high, model.ppf(.99)), 480)
+                x = curve_grid(min(low, model.ppf(.01)), max(high, model.ppf(.99)), model.ppf)
                 with np.errstate(all="ignore"):
                     density = model.pdf(x)
                 ax.plot(x, np.where(np.isfinite(density), density, np.nan), color=reference, label="Densidad teórica")
@@ -554,7 +526,8 @@ class RandomNumbers:
     def session_settings(self):
         name = self.name.get()
         observations = self.empirical.get("1.0", "end-1c") if name == "Empírica" else ""
-        return {"name": name, "parameters": {key: var.get() for key, var in self.parameters.items()},
+        parameters = {key: translate_parameter_text(name, key, var.get()) for key, var in self.parameters.items()}
+        return {"name": name, "parameters": parameters,
                 "observations": observations, "count": self.count.get(), "seed": self.seed.get(),
                 "sample": self.sample, "caption": self.sample_caption}
 

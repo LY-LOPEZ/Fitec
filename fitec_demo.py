@@ -84,8 +84,10 @@ class NormalSurface:
         self.scale.configure(from_=lo, to=hi)
         if abs(self.scale.get() - sigma) > 1e-7 * sigma:
             self.scale.set(sigma)
-        xs = np.linspace(mu - 4 * hi, mu + 4 * hi, 121)
-        x, y = np.meshgrid(xs, np.linspace(lo, hi, 35))
+        standard = np.linspace(-4, 4, 81)
+        xs = np.unique(mu + np.r_[hi * standard, lo * standard[::2], sigma * standard[::2]])
+        deviations = np.unique(np.r_[np.geomspace(lo, hi, 35), sigma])
+        x, y = np.meshgrid(xs, deviations)
         night = is_night(self.e.root)
         if night != self.night:
             view = self.axes.elev, self.axes.azim, self.axes.roll
@@ -102,7 +104,8 @@ class NormalSurface:
                 axis.line.set_color(NIGHT.border)
                 axis.set_major_locator(MaxNLocator(nbins=4))
             ax.tick_params(colors=NIGHT.muted)
-        ax.plot_surface(x, y, norm.pdf(x, mu, y), cmap=NIGHT_SURFACE if night else "GnBu", alpha=.65, linewidth=0)
+        ax.plot_surface(x, y, norm.pdf(x, mu, y), rcount=len(deviations), ccount=len(xs),
+                        cmap=NIGHT_SURFACE if night else "GnBu", alpha=.65, linewidth=0)
         ax.plot(xs, np.full_like(xs, sigma), norm.pdf(xs, mu, sigma),
                 color=NIGHT.reference if night else "#034f50", lw=3)
         ax.set(xlabel="x", ylabel="σ", zlabel="Densidad")

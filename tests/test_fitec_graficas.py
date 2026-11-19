@@ -1,7 +1,7 @@
 """Audit the desktop explorer and generator against explicit course parameterizations."""
 
 import tkinter as tk
-from tkinter import ttk
+from tkinter import font as tkfont, ttk
 
 import numpy as np
 import pytest
@@ -16,6 +16,7 @@ from fitec_tutor import congruential_rows, decimal
 
 REFERENCES = {
     "Normal": stats.norm(), "Uniforme": stats.uniform(scale=10),
+    "Triangular": stats.triang(.4, scale=10),
     "Exponencial": stats.expon(scale=5), "Erlang": stats.gamma(2),
     "Chi-cuadrado": stats.chi2(4), "t de Student": stats.t(10), "F de Fisher": stats.f(5, 10),
     "Beta": stats.beta(2, 2), "Gamma": stats.gamma(2, scale=2), "Weibull": stats.weibull_min(1.5),
@@ -135,9 +136,63 @@ def test_empirical_steps_and_resampling(desktop):
 def test_large_poisson_view_and_extreme_probability():
     model = DISCRETE["Poisson"][0](lambda_param=100000)
     grid = FitecApp._window(None, model, [0])
-    assert grid[0] <= model.median() <= grid[-1]
+    assert model.cdf(grid[-1]) - model.cdf(grid[0] - 1) >= .998
     pct, decimal = format_probability(np.nextafter(1., 0.))
     assert pct.startswith(">") and decimal != "= 1"
+
+
+def test_wide_poisson_groups_preserve_selected_mass(desktop):
+    explorer = desktop.explorer
+    explorer.graph_mode.set("Densidad")
+    low, high = 99992, 100009
+    explorer.select_model("Poisson", {"lambda_param": 100000}, discrete=True,
+                          event=("entre", low, high))
+    starts, masses, style = explorer._plot_data
+    ends = explorer._plot_interval_ends
+    assert style == "intervalos"
+    ref = stats.poisson(100000)
+    np.testing.assert_allclose(masses, [ref.pmf(np.arange(a, b + 1)).sum()
+                                       for a, b in zip(starts, ends)], rtol=1e-8)
+    highlight = [bar.get_height() for bar in explorer.ax.patches if bar.get_facecolor() == to_rgba(TEAL)]
+    assert sum(highlight) == pytest.approx(ref.cdf(high) - ref.cdf(low - 1))
+    explorer._show_coordinates(low)
+    assert "Masa" in explorer._tooltip.get_text()
+    explorer.graph_mode.set("Acumulada")
+    explorer.update_plot()
+    x, y, _ = explorer._plot_data
+    np.testing.assert_allclose(y, ref.cdf(x))
+    assert {low - 1, low, high, high + 1}.issubset(x)
+    span = explorer.ax.patches[0]
+    assert (span.get_x(), span.get_width()) == (low, high + 1 - low)
+    explorer.canvas.draw()
+
+
+def test_concentrated_continuous_density_and_exact_cursor(desktop):
+    explorer = desktop.explorer
+    explorer.graph_mode.set("Densidad")
+    low, high = .000052, .000154
+    explorer.select_model("Beta", {"alpha": 2, "beta": 10000}, discrete=False,
+                          event=("entre", low, high))
+    ref = stats.beta(2, 10000)
+    vertices = explorer.ax.collections[0].get_paths()[0].vertices
+    x, y = vertices.T
+    assert (x.min(), x.max()) == (low, high)
+    area = abs(np.dot(x, np.roll(y, 1)) - np.dot(y, np.roll(x, 1))) / 2
+    assert area == pytest.approx(ref.cdf(high) - ref.cdf(low), abs=1e-5)
+    assert explorer.ax.get_xlim()[1] < .01
+    cursor = .0000937654
+    explorer._show_coordinates(cursor)
+    assert explorer._tooltip.xy == pytest.approx((cursor, ref.pdf(cursor)), rel=1e-12)
+    explorer.canvas.draw()
+
+
+def test_tick_labels_distinguish_nearby_coordinates():
+    from fitec_plotting import DistinctTicks
+
+    ticks = np.array([1e8, 1e8 + .001, 1e8 + .002])
+    labels = DistinctTicks().format_ticks(ticks)
+    assert len(set(labels)) == len(ticks)
+    np.testing.assert_array_equal([float(label.replace(",", ".")) for label in labels], ticks)
 
 
 def test_largest_congruential_residue_stays_below_one():
@@ -159,6 +214,12 @@ def test_normal_surface_slice(desktop):
         np.testing.assert_allclose(sigma, 1.5)
         np.testing.assert_allclose(density, stats.norm.pdf(x, scale=1.5))
         assert explorer.ax in explorer.figure.axes
+        explorer.parameter_vars["sigma"].set("0,0001")
+        explorer.update_plot()
+        x, sigma, density = surface.axes.lines[0].get_data_3d()
+        assert np.count_nonzero(np.abs(x) < .0001) >= 9
+        np.testing.assert_allclose(sigma, .0001)
+        np.testing.assert_allclose(density, stats.norm.pdf(x, scale=.0001))
     finally:
         surface.close()
 
@@ -208,3 +269,43 @@ def test_day_night_keeps_probability_and_sample(desktop):
     assert button.cget("text") == "Noche"
     assert explorer.ax.get_facecolor() == day_axes
     assert ttk.Style(desktop.theme.root).lookup("Panel.TFrame", "background") == day_panel
+
+
+def test_zoom_resizes_interface_and_workspace_in_both_themes(desktop):
+    root = desktop.theme.root
+    menus = desktop.menus
+    style = ttk.Style(root)
+    font_size = tkfont.nametofont("TkDefaultFont", root=root).cget("size")
+    icon_size = desktop.icons["zoom"].width()
+    row_height = int(style.lookup("Sample.Treeview", "rowheight"))
+    probability_text = desktop.explorer.result.cget("text")
+    graph_limits = desktop.explorer.ax.get_xlim()
+    try:
+        menus.zoom_menu.invoke(3)
+        assert menus.zoom_button.cget("text") == "125 %"
+        assert tkfont.nametofont("TkDefaultFont", root=root).cget("size") > font_size
+        assert desktop.icons["zoom"].width() > icon_size
+        assert int(style.lookup("Sample.Treeview", "rowheight")) > row_height
+
+        menus.open_fit_workspace()
+        menus.fit_workspace.root.withdraw()
+        zoomed_grid_row = int(style.lookup("Data.Treeview", "rowheight"))
+        desktop.toggle_theme()
+        assert int(style.lookup("Data.Treeview", "rowheight")) == zoomed_grid_row
+        assert menus.zoom_button.cget("image")[0] == str(menus.night_icons["zoom"])
+
+        menus.zoom_menu.invoke(0)
+        assert menus.zoom_button.cget("text") == "90 %"
+        assert desktop.icons["zoom"].width() < icon_size
+        assert int(style.lookup("Data.Treeview", "rowheight")) < zoomed_grid_row
+        assert desktop.explorer.result.cget("text") == probability_text
+        assert desktop.explorer.ax.get_xlim() == graph_limits
+    finally:
+        menus.zoom_menu.invoke(1)
+        if desktop.theme.night:
+            desktop.toggle_theme()
+        if menus.fit_workspace is not None:
+            menus.fit_workspace.close()
+            menus.fit_workspace = None
+    assert desktop.icons["zoom"].width() == icon_size
+    assert int(style.lookup("Sample.Treeview", "rowheight")) == row_height

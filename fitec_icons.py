@@ -1,8 +1,58 @@
-"""Small line icons shared by the native FITEC windows."""
+"""Icons and header marks shared by the native FITEC windows."""
 
-from PIL import Image, ImageDraw, ImageTk
+from io import BytesIO
+from pathlib import Path
+import tkinter as tk
+from weakref import WeakSet
+
+from PIL import Image, ImageDraw
 
 TEAL = "#087d77"
+ASSETS = Path(__file__).with_name("probviz") / "assets"
+
+
+class InterfaceIcon(tk.PhotoImage):
+    def __init__(self, master, image, size):
+        super().__init__(master=master)
+        self.source, self.base_size = image, size
+        root = master.nametowidget(".")
+        if not hasattr(root, "_fitec_icons"):
+            root._fitec_icons = WeakSet()
+        root._fitec_icons.add(self)
+        theme = getattr(root, "_fitec_theme", None)
+        self.resize(theme.zoom / 100 if theme else 1)
+
+    def resize(self, factor):
+        size = tuple(max(1, round(length * factor)) for length in self.base_size)
+        if size == (self.width(), self.height()):
+            return
+        with BytesIO() as data:
+            self.source.resize(size, Image.Resampling.LANCZOS).save(data, "PNG")
+            self.configure(data=data.getvalue(), format="png")
+
+
+def add_header_mark(header, filename, label, size, **placement):
+    badge = tk.Label(header, text=label, background=header.cget("background"), foreground="white",
+                     font=("Inter", 12, "bold"), borderwidth=0)
+    try:
+        with Image.open(ASSETS / filename) as source:
+            logo = source.convert("RGBA")
+            bounds = logo.getbbox()
+            if bounds:
+                logo = logo.crop(bounds)
+            height = max(1, round(header.winfo_fpixels(size)))
+            width = max(1, round(logo.width * height / logo.height))
+        badge.logo_image = InterfaceIcon(header, logo, (width, height))
+        badge.configure(image=badge.logo_image)
+    except OSError:
+        pass
+    badge.pack(**placement)
+
+
+def add_usfx_mark(header):
+    tk.Label(header, text="USFX", background=header.cget("background"), foreground="white",
+             font=("Inter", 18, "bold")).pack(side="right", padx=(0, 14))
+    add_header_mark(header, "usfx.png", "Escudo de la USFX", "37p", side="right", padx=(8, 8), pady=6)
 
 ICON_PATHS = {
     "table": (((2, 3), (18, 3), (18, 17), (2, 17), (2, 3)),
@@ -34,6 +84,8 @@ ICON_PATHS = {
                 ((12, 12), (18, 18)), ((5, 8), (11, 8)), ((8, 5), (8, 11))),
     "zoom_out": (((8, 2), (12, 4), (14, 8), (12, 12), (8, 14), (4, 12), (2, 8), (4, 4), (8, 2)),
                  ((12, 12), (18, 18)), ((5, 8), (11, 8))),
+    "zoom": (((8, 2), (12, 4), (14, 8), (12, 12), (8, 14), (4, 12), (2, 8), (4, 4), (8, 2)),
+             ((12, 12), (18, 18))),
     "help": (((10, 2), (15, 4), (18, 9), (17, 14), (13, 17), (8, 18), (3, 15), (2, 10),
               (4, 5), (10, 2)), ((7, 8), (8, 6), (11, 6), (13, 8), (11, 10), (10, 11)),
              ((10, 14), (10, 15))),
@@ -62,6 +114,5 @@ def make_icons(root, *, color=TEAL, names=None, size=None):
         ink = "white" if name == "fit" else color
         for path in paths:
             draw.line([(4 * x, 4 * y) for x, y in path], fill=ink, width=6, joint="curve")
-        resampling = getattr(Image, "Resampling", Image).LANCZOS
-        images[name] = ImageTk.PhotoImage(image.resize((size, size), resampling), master=root)
+        images[name] = InterfaceIcon(root, image, (size, size))
     return images

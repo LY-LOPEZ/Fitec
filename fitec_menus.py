@@ -9,7 +9,7 @@ from tkinter import filedialog, messagebox, ttk
 
 from fitec_icons import make_icons
 from fitec_queues import validate_queue_settings
-from fitec_theme import NIGHT
+from fitec_theme import NIGHT, ZOOM_LEVELS
 
 
 PAPER = "#edf3f5"
@@ -189,15 +189,30 @@ class FitecMenus:
         style.configure("Theme.TButton", padding=(12, 5), font=("Inter", 9, "bold"),
                         background="#f4f8f9", foreground=INK, width=0, borderwidth=0, relief="flat")
         style.map("Theme.TButton", background=[("pressed", MINT), ("active", MINT), ("focus", MINT)])
-        self.night_sun = make_icons(self.root, color=NIGHT.focus, names=("sun",))["sun"]
+        self.night_icons = make_icons(self.root, color=NIGHT.focus, names=("sun", "zoom"))
         self.theme_button = ttk.Button(bar, style="Theme.TButton", compound="left",
                                       command=self.app.toggle_theme)
         self.theme_button.pack(side="left", padx=(4, 0))
+        self.zoom = tk.IntVar(self.root, value=100)
+        self.zoom_button = ttk.Menubutton(bar, text="100 %", compound="left", style="Menu.TMenubutton",
+                                         takefocus=True)
+        self.zoom_button.pack(side="left", padx=(4, 0))
+        self.zoom_menu = self._popup(self.zoom_button)
+        self.zoom_button.configure(menu=self.zoom_menu)
+        for level in ZOOM_LEVELS:
+            self.zoom_menu.add_radiobutton(label="100 % (original)" if level == 100 else f"{level} %",
+                                           variable=self.zoom, value=level, command=self._set_zoom)
         self.update_theme_control(False)
 
     def update_theme_control(self, night):
         self.theme_button.configure(text="Día" if night else "Noche",
-                                    image=self.night_sun if night else self.app.icons["moon"])
+                                    image=self.night_icons["sun"] if night else self.app.icons["moon"])
+        self.zoom_button.configure(image=self.night_icons["zoom"] if night else self.app.icons["zoom"])
+
+    def _set_zoom(self):
+        percentage = self.zoom.get()
+        self.app.theme.set_zoom(percentage)
+        self.zoom_button.configure(text=f"{percentage} %")
 
     @staticmethod
     def _popup(parent, prepare=None):

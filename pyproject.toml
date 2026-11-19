@@ -44,6 +44,7 @@ dependencies = [
 
 [project.optional-dependencies]
 desktop = [
+    "openpyxl>=3.1.0",
     "pillow>=10.0.0",
     "pyinstaller>=6.0",
 ]
@@ -74,8 +75,8 @@ probviz = "src.cli:main"
 fitec = "desktop_app:main"
 
 [tool.setuptools]
-py-modules = ["desktop_app", "fitec_demo", "fitec_analysis", "fitec_assistant", "fitec_icons", "fitec_menus",
-              "fitec_queues", "fitec_theme", "fitec_tools", "fitec_tutor", "fitec_workspace"]
+py-modules = ["desktop_app", "fitec_demo", "fitec_analysis", "fitec_assistant", "fitec_excel", "fitec_icons", "fitec_menus",
+              "fitec_labels", "fitec_plotting", "fitec_queues", "fitec_theme", "fitec_tools", "fitec_tutor", "fitec_workspace"]
 
 [tool.setuptools.package-data]
 probviz = ["assets/*.png", "assets/*.ico"]

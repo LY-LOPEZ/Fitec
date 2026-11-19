@@ -128,6 +128,35 @@ class UniformDistribution(Distribution):
         }
 
 
+class TriangularDistribution(Distribution):
+    """Continuous distribution described by a minimum, most likely value, and maximum."""
+
+    def __init__(self, a: float = 0.0, mode: float = 4.0, b: float = 10.0):
+        super().__init__("Triangular", is_discrete=False)
+        self._parameters = {}
+        self.set_parameters(a=a, mode=mode, b=b)
+
+    def _create_distribution(self, **params):
+        a, mode, b = params["a"], params["mode"], params["b"]
+        return stats.triang((mode - a) / (b - a), loc=a, scale=b - a)
+
+    def get_parameters(self) -> dict[str, Any]:
+        return self._parameters.copy()
+
+    def set_parameters(self, **params):
+        updated = {**self._parameters, **params}
+        a, mode, b = updated["a"], updated["mode"], updated["b"]
+        if not np.isfinite(b - a) or not a < b:
+            raise ValueError("El mínimo debe ser menor que el máximo y el intervalo debe ser finito.")
+        if not a <= mode <= b:
+            raise ValueError("El valor más probable debe estar entre el mínimo y el máximo.")
+        self._dist = self._create_distribution(**updated)
+        self._parameters = updated
+
+    def get_parameter_bounds(self) -> dict[str, tuple[float, float]]:
+        return {}
+
+
 class BetaDistribution(Distribution):
     """Beta distribution."""
 

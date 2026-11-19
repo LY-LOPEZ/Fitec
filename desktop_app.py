@@ -17,9 +17,10 @@ import numpy as np
 if tk is not None:
     from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.figure import Figure
-from matplotlib.ticker import FuncFormatter
 
 from fitec_theme import NIGHT, is_night
+from fitec_plotting import DistinctTicks, curve_grid, discrete_grid, interval_masses
+from fitec_labels import PARAMETER_LABELS, model_display_name, translate_parameter_text, uses_rate
 from src.distributions import (
     BetaDistribution,
     BinomialDistribution,
@@ -37,6 +38,7 @@ from src.distributions import (
     NormalDistribution,
     PoissonDistribution,
     StudentTDistribution,
+    TriangularDistribution,
     UniformDistribution,
     WeibullDistribution,
     ZeroGeometricDistribution,
@@ -44,33 +46,28 @@ from src.distributions import (
 
 
 CONTINUOUS = {
-    "Uniforme": (UniformDistribution, {"a": 0.0, "b": 10.0}, {"a": "a · Límite inferior", "b": "b · Límite superior"}),
-    "Exponencial": (ExponentialDistribution, {"lambda_param": 0.2}, {"lambda_param": "λ · Tasa"}),
-    "Erlang": (ErlangDistribution, {"k": 2, "lambda_param": 1.0}, {"k": "k · Forma (entero)", "lambda_param": "λ · Tasa"}),
-    "Normal": (NormalDistribution, {"mu": 0.0, "sigma": 1.0}, {"mu": "μ · Media", "sigma": "σ · Desviación estándar"}),
-    "Chi-cuadrado": (ChiSquareDistribution, {"df": 4}, {"df": "m · Grados de libertad"}),
-    "t de Student": (StudentTDistribution, {"df": 10.0}, {"df": "m · Grados de libertad"}),
-    "F de Fisher": (
-        FisherFDistribution,
-        {"dfn": 5.0, "dfd": 10.0},
-        {"dfn": "m · Grados de libertad del numerador",
-         "dfd": "n · Grados de libertad del denominador"},
-    ),
-    # Distribuciones adicionales que ya ofrecía Probviz.
-    "Beta": (BetaDistribution, {"alpha": 2.0, "beta": 2.0}, {"alpha": "α", "beta": "β"}),
-    "Gamma": (GammaDistribution, {"shape": 2.0, "scale": 2.0}, {"shape": "Forma", "scale": "Escala"}),
-    "Weibull": (WeibullDistribution, {"shape": 1.5, "scale": 1.0}, {"shape": "Forma", "scale": "Escala"}),
-    "Lognormal": (LognormalDistribution, {"mu": 0.0, "sigma": 1.0}, {"mu": "μ", "sigma": "σ"}),
-    "Cauchy": (CauchyDistribution, {"x0": 0.0, "gamma": 1.0}, {"x0": "Ubicación", "gamma": "Escala"}),
+    "Uniforme": (UniformDistribution, {'a': 0.0, 'b': 10.0}, PARAMETER_LABELS["Uniforme"]),
+    "Triangular": (TriangularDistribution, {'a': 0.0, 'mode': 4.0, 'b': 10.0}, PARAMETER_LABELS["Triangular"]),
+    "Exponencial": (ExponentialDistribution, {'lambda_param': 0.2}, PARAMETER_LABELS["Exponencial"]),
+    "Erlang": (ErlangDistribution, {'k': 2, 'lambda_param': 1.0}, PARAMETER_LABELS["Erlang"]),
+    "Normal": (NormalDistribution, {'mu': 0.0, 'sigma': 1.0}, PARAMETER_LABELS["Normal"]),
+    "Chi-cuadrado": (ChiSquareDistribution, {'df': 4}, PARAMETER_LABELS["Chi-cuadrado"]),
+    "t de Student": (StudentTDistribution, {'df': 10.0}, PARAMETER_LABELS["t de Student"]),
+    "F de Fisher": (FisherFDistribution, {'dfn': 5.0, 'dfd': 10.0}, PARAMETER_LABELS["F de Fisher"]),
+    "Beta": (BetaDistribution, {'alpha': 2.0, 'beta': 2.0}, PARAMETER_LABELS["Beta"]),
+    "Gamma": (GammaDistribution, {'shape': 2.0, 'scale': 2.0}, PARAMETER_LABELS["Gamma"]),
+    "Weibull": (WeibullDistribution, {'shape': 1.5, 'scale': 1.0}, PARAMETER_LABELS["Weibull"]),
+    "Lognormal": (LognormalDistribution, {'mu': 0.0, 'sigma': 1.0}, PARAMETER_LABELS["Lognormal"]),
+    "Cauchy": (CauchyDistribution, {'x0': 0.0, 'gamma': 1.0}, PARAMETER_LABELS["Cauchy"]),
 }
 DISCRETE = {
-    "Geométrica": (ZeroGeometricDistribution, {"p": 0.3}, {"p": "p · Probabilidad de éxito"}),
-    "Geométrica (ensayos)": (GeometricDistribution, {"p": 0.3}, {"p": "p · Probabilidad de éxito"}),
-    "Binomial negativa": (NegativeBinomialDistribution, {"r": 5, "p": 0.4}, {"r": "r · Éxitos", "p": "p · Probabilidad de éxito"}),
-    "Binomial": (BinomialDistribution, {"n": 10, "p": 0.5}, {"n": "n · Ensayos", "p": "p · Probabilidad de éxito"}),
-    "Poisson": (PoissonDistribution, {"lambda_param": 4.0}, {"lambda_param": "λ · Tasa"}),
-    "Uniforme discreta": (DiscreteUniformDistribution, {"low": 1, "high": 6}, {"low": "a · Mínimo", "high": "b · Máximo"}),
-    "Hipergeométrica": (HypergeometricDistribution, {"M": 20, "n": 7, "N": 8}, {"M": "M · Población", "n": "K · Éxitos en población", "N": "n · Extracciones"}),
+    "Geométrica": (ZeroGeometricDistribution, {'p': 0.3}, PARAMETER_LABELS["Geométrica"]),
+    "Geométrica (ensayos)": (GeometricDistribution, {'p': 0.3}, PARAMETER_LABELS["Geométrica (ensayos)"]),
+    "Binomial negativa": (NegativeBinomialDistribution, {'r': 5, 'p': 0.4}, PARAMETER_LABELS["Binomial negativa"]),
+    "Binomial": (BinomialDistribution, {'n': 10, 'p': 0.5}, PARAMETER_LABELS["Binomial"]),
+    "Poisson": (PoissonDistribution, {'lambda_param': 4.0}, PARAMETER_LABELS["Poisson"]),
+    "Uniforme discreta": (DiscreteUniformDistribution, {'low': 1, 'high': 6}, PARAMETER_LABELS["Uniforme discreta"]),
+    "Hipergeométrica": (HypergeometricDistribution, {'M': 20, 'n': 7, 'N': 8}, PARAMETER_LABELS["Hipergeométrica"]),
 }
 PROBABILITY_LABELS = {
     "hasta": "Hasta (≤)",
@@ -165,13 +162,17 @@ class ParameterInputError(ValueError):
 
 
 def parse_parameter(name, key, text):
-    symbol = {"df": "m", "dfn": "m", "dfd": "n"}.get(key, key)
+    symbol = PARAMETER_LABELS.get(name, {}).get(key, key).split(" · ")[0]
     try:
         value = read_number(text)
     except ValueError as exc:
         raise ParameterInputError(key, f"{symbol}: ingresa un valor numérico finito.") from exc
     if key in {"df", "dfn", "dfd"} and value <= 0:
         raise ParameterInputError(key, f"{symbol} debe ser mayor que cero.")
+    if uses_rate(name, key) and value <= 0:
+        raise ParameterInputError(key, "La tasa λ debe ser mayor que cero.")
+    if name == "Gamma" and key == "shape" and value <= 0:
+        raise ParameterInputError(key, "La forma k debe ser mayor que cero.")
     if key in INTEGER_PARAMETERS or (name == "Chi-cuadrado" and key == "df"):
         if not value.is_integer():
             raise ParameterInputError(key, f"{symbol} debe ser un número entero.")
@@ -327,7 +328,7 @@ class FitecApp:
                                 side="left", fill="x", expand=True)
         self.dist_controls = ttk.Frame(self.left, style="Panel.TFrame")
         self.dist_controls.pack(fill="x")
-        self.dist_combo = ttk.Combobox(self.dist_controls, textvariable=self.distribution,
+        self.dist_combo = ttk.Combobox(self.dist_controls,
                                        state="readonly", width=19)
         self.dist_combo.pack(fill="x")
         self.dist_combo.bind("<<ComboboxSelected>>", self._distribution_changed)
@@ -478,6 +479,10 @@ class FitecApp:
                 self._schedule_update()
 
     def _distribution_changed(self, _event=None):
+        registry = CONTINUOUS if self.mode.get() == "Continuas" else DISCRETE
+        index = self.dist_combo.current()
+        if _event is not None and index >= 0:
+            self.distribution.set(tuple(registry)[index])
         self._dragged_limit = None
         self._zoom_factor = 1.0
         self._rebuild_parameters()
@@ -498,14 +503,16 @@ class FitecApp:
         else:
             self.dist_controls.pack(fill="x")
             registry = CONTINUOUS if mode == "Continuas" else DISCRETE
-            self.dist_combo.configure(values=tuple(registry))
+            self.dist_combo.configure(values=tuple(map(model_display_name, registry)))
             if self.distribution.get() not in registry:
                 default = "Exponencial" if mode == "Continuas" else "Binomial"
                 self.distribution.set(default)
-            _, defaults, labels = registry[self.distribution.get()]
+            name = self.distribution.get()
+            self.dist_combo.set(model_display_name(name))
+            _, defaults, labels = registry[name]
             for key, value in defaults.items():
                 ttk.Label(self.parameter_box, text=labels[key], wraplength=205).pack(anchor="w", pady=(5, 3))
-                var = tk.StringVar(value=format_number(value))
+                var = tk.StringVar(value=translate_parameter_text(name, key, format_number(value)))
                 var.trace_add("write", self._schedule_update)
                 self.parameter_vars[key] = var
                 if self.distribution.get() == "Normal":
@@ -630,7 +637,17 @@ class FitecApp:
 
     def _show_coordinates(self, x):
         xs, ys, style = self._plot_data
-        if style == "escalón":
+        if style == "intervalos":
+            index = np.searchsorted(xs - .5, x, side="right") - 1
+            if index < 0 or x > self._plot_interval_ends[index] + .5:
+                self._hide_coordinates()
+                return
+            start, end = xs[index], self._plot_interval_ends[index]
+            position = f"{format_number(start, 10)} ≤ X ≤ {format_number(end, 10)}"
+            x, y = start + (end - start) / 2, ys[index]
+        elif self._plot_evaluator is not None:
+            y = float(self._plot_evaluator(x))
+        elif style == "escalón":
             index = max(0, np.searchsorted(xs, x, side="right") - 1)
             y = ys[index]
         elif style == "barras":
@@ -642,7 +659,10 @@ class FitecApp:
             self._hide_coordinates()
             return
         self._tooltip.xy = (x, y)
-        self._tooltip.set_text(f"x = {format_number(x, 4)}\ny = {format_number(y, 4)}")
+        if style == "intervalos":
+            self._tooltip.set_text(f"{position}\nMasa = {format_number(y, 8)}")
+        else:
+            self._tooltip.set_text(f"x = {format_number(x, 8)}\ny = {format_number(y, 8)}")
         self._tooltip.set_position((-10, 12) if x > np.mean(self.ax.get_xlim()) else (10, 12))
         self._tooltip.set_ha("right" if x > np.mean(self.ax.get_xlim()) else "left")
         self._tooltip.set_visible(True)
@@ -654,7 +674,9 @@ class FitecApp:
     def generator_selection(self):
         if self.mode.get() == "Empírica":
             return "Empírica", {}, self.data_text.get("1.0", "end-1c")
-        return self.distribution.get(), {key: var.get() for key, var in self.parameter_vars.items()}, ""
+        name = self.distribution.get()
+        return name, {key: translate_parameter_text(name, key, var.get())
+                      for key, var in self.parameter_vars.items()}, ""
 
     def session_settings(self):
         name, parameters, _ = self.generator_selection()
@@ -678,15 +700,16 @@ class FitecApp:
         self.data_text.edit_reset()
         if settings["mode"] != "Empírica":
             for key, value in settings["parameters"].items():
-                self.parameter_vars[key].set(value)
+                self.parameter_vars[key].set(translate_parameter_text(settings["name"], key, value))
         self.update_plot()
 
     def _create_distribution(self):
         registry = CONTINUOUS if self.mode.get() == "Continuas" else DISCRETE
-        cls, _, _ = registry[self.distribution.get()]
+        name = self.distribution.get()
+        cls, _, _ = registry[name]
         params = {}
         for key, var in self.parameter_vars.items():
-            value = parse_parameter(self.distribution.get(), key, var.get())
+            value = parse_parameter(name, key, translate_parameter_text(name, key, var.get()))
             slider = self.parameter_sliders.get(key)
             if slider is not None and slider.get() != value:
                 # Mute the slider callback so typed values outside its range stay intact.
@@ -720,7 +743,7 @@ class FitecApp:
                 and float(value).is_integer()
             )
             self.parameter_vars[key].set(
-                str(int(round(value))) if is_int else format_number(float(value), 12)
+                str(int(round(value))) if is_int else translate_parameter_text(name, key, format_number(float(value), 12))
             )
         self.update_plot()
 
@@ -731,23 +754,24 @@ class FitecApp:
             q999 = float(dist.ppf(.999))
             q_lo = float(support_lo) if np.isfinite(support_lo) and q001 - support_lo <= 40 else q001
             q_hi = float(min(support_hi, q999))
-            lo = max(support_lo, min(q_lo, *(math.floor(v) for v in limits)))
-            hi = min(support_hi, max(q_hi, *(math.ceil(v) for v in limits)))
-            if hi - lo > 300:
-                center = round(float(dist.ppf(.5)))
-                lo = max(support_lo, center - 150)
-                hi = min(support_hi, lo + 300)
-                lo = max(support_lo, hi - 300)
+            span = max(q_hi - q_lo, 10)
+            near = [value for value in limits if q_lo - span <= value <= q_hi + span]
+            lo = max(support_lo, min([q_lo, *(math.floor(v) for v in near)]))
+            hi = min(support_hi, max([q_hi, *(math.ceil(v) for v in near)]))
             if hi < lo + 5 and np.isfinite(lo):
                 hi = min(support_hi, lo + 6)
-            return np.arange(math.ceil(lo), math.floor(hi) + 1)
+            return discrete_grid(math.ceil(lo), math.floor(hi))
 
         q05, q95 = float(dist.ppf(.05)), float(dist.ppf(.95))
         q001, q999 = float(dist.ppf(.001)), float(dist.ppf(.999))
         heavy_tail = (q999 - q001) > 12 * max(q95 - q05, 1e-9)
         low_q, high_q = (.01, .99) if heavy_tail else (.001, .999)
-        lo = support_lo if np.isfinite(support_lo) else float(dist.ppf(low_q))
-        hi = support_hi if np.isfinite(support_hi) else float(dist.ppf(high_q))
+        lo, hi = (q001, q999) if not heavy_tail else (float(dist.ppf(low_q)), float(dist.ppf(high_q)))
+        central_span = hi - lo
+        if np.isfinite(support_lo) and lo - support_lo <= central_span * 1.5:
+            lo = support_lo
+        if np.isfinite(support_hi) and support_hi - hi <= central_span * 1.5:
+            hi = support_hi
         if isinstance(dist, NormalDistribution):
             lo, hi = dist.mean() - 4 * dist.std(), dist.mean() + 4 * dist.std()
         if not np.isfinite(lo):
@@ -757,16 +781,17 @@ class FitecApp:
         if hi <= lo:
             hi = lo + max(1.0, abs(lo) * .001)
         span = max(hi - lo, 1e-6)
-        if not np.isfinite(support_lo):
-            for lim in limits:
-                if lo - 1.5 * span <= lim < lo:
-                    lo = lim - 0.05 * span
-        if not np.isfinite(support_hi):
-            for lim in limits:
-                if hi < lim <= hi + 1.5 * span:
-                    hi = lim + 0.05 * span
-        grid = np.linspace(lo, hi, 600)
-        return np.unique(np.r_[grid, [limit for limit in limits if lo <= limit <= hi]])
+        for lim in limits:
+            if lo - 1.5 * span <= lim < lo:
+                lo = max(support_lo, lim - .05 * span)
+            if hi < lim <= hi + 1.5 * span:
+                hi = min(support_hi, lim + .05 * span)
+        grid = curve_grid(lo, hi, dist.ppf, limits=limits)
+        if isinstance(dist, TriangularDistribution):
+            mode = dist.get_parameters()["mode"]
+            if lo <= mode <= hi:
+                grid = np.unique(np.r_[grid, mode])
+        return grid
 
     def update_plot(self):
         self.figure.set_facecolor(NIGHT.panel if is_night(self.root) else SURFACE)
@@ -807,24 +832,42 @@ class FitecApp:
                 y = np.r_[0, np.cumsum(counts) / ordered.size, 1]
                 if self.show_moments:
                     self._show_stats(np.mean(ordered), np.var(ordered), np.std(ordered))
-                self._draw(x, y, "escalón", "Fₙ(x)", limits, kind, cumulative=True)
+                self._draw(x, y, "escalón", "Fₙ(x)", limits, kind, cumulative=True, empirical=True)
             else:
                 dist = self._create_distribution()
                 result = probability(dist, kind, first, second)
                 x = self._window(dist, limits)
                 cumulative = self.graph_mode.get() == "Acumulada"
+                grouped = dist.is_discrete and np.any(np.diff(x) > 1)
+                event = self._integer_event_bounds(kind, first, second) if dist.is_discrete else None
+                ends = None
+                evaluator = None
                 if cumulative and dist.is_discrete:
                     x = np.r_[x[0] - 1, x, x[-1] + 1]
-                y = dist.cdf(x) if cumulative else dist.pdf(x)
                 if cumulative:
-                    style = "escalón" if dist.is_discrete else "curva"
-                    ylabel = "Acumulada"
+                    if grouped:
+                        boundaries = [value for value in (*event, event[0] - 1, event[1] + 1)
+                                      if x[0] <= value <= x[-1]]
+                        x = np.unique(np.r_[x, boundaries])
+                    evaluator = dist.cdf
+                    y = evaluator(x)
+                    style = "escalón" if dist.is_discrete and not grouped else "curva"
+                    ylabel = "Acumulada (muestreada)" if grouped else "Acumulada"
+                elif grouped:
+                    cuts = [value for value in (event[0], event[1] + 1) if x[0] < value <= x[-1]]
+                    x = np.unique(np.r_[x, cuts])
+                    ends = np.r_[x[1:] - 1, x[-1]]
+                    y = interval_masses(dist, x, ends)
+                    style, ylabel = "intervalos", "Masa por intervalo"
                 else:
+                    y = dist.pdf(x)
                     style = "barras" if dist.is_discrete else "curva"
                     ylabel = "Masa" if dist.is_discrete else "Densidad"
+                    evaluator = None if dist.is_discrete else dist.pdf
                 if self.show_moments:
                     self._show_stats(dist.mean(), dist.var(), dist.std())
-                self._draw(x, y, style, ylabel, limits, kind, cumulative=cumulative)
+                self._draw(x, y, style, ylabel, limits, kind, cumulative=cumulative,
+                           evaluator=evaluator, integer_event=event, interval_ends=ends)
         except ParameterInputError as exc:
             self._clear_result()
             self.parameter_errors[exc.key].configure(text=str(exc))
@@ -899,7 +942,8 @@ class FitecApp:
             return float(np.mean((values >= first) & (values <= second)))
         raise ValueError("Tipo de probabilidad no válido.")
 
-    def _draw(self, x, y, style, ylabel, limits, kind, *, cumulative):
+    def _draw(self, x, y, style, ylabel, limits, kind, *, cumulative, evaluator=None,
+              integer_event=None, interval_ends=None, empirical=False):
         if self._animation_id is not None:
             self.root.after_cancel(self._animation_id)
             self._animation_id = None
@@ -918,8 +962,8 @@ class FitecApp:
         for spine in ("left", "bottom"):
             self.ax.spines[spine].set_color(NIGHT.border if night else "#9fb7be")
         self.ax.tick_params(colors=NIGHT.muted if night else MUTED, labelsize=9)
-        self.ax.xaxis.set_major_formatter(FuncFormatter(lambda value, _: format_number(value, 4)))
-        self.ax.yaxis.set_major_formatter(FuncFormatter(lambda value, _: format_number(value, 4)))
+        self.ax.xaxis.set_major_formatter(DistinctTicks())
+        self.ax.yaxis.set_major_formatter(DistinctTicks())
         first, *upper = limits
         second = upper[0] if upper else None
         finite_y = np.where(np.isfinite(y), y, np.nan)
@@ -930,19 +974,29 @@ class FitecApp:
         else:
             line = None
             outside = NIGHT.inactive_bar if night else "#d2e1e5"
-            colors = [curve_color if self._inside_probability(int(v), kind, first, second)
-                      else outside for v in x]
-            self.ax.bar(x, finite_y, width=.8, color=colors)
-        if cumulative and kind != "exacta":
-            lo = x[0] if kind in ("hasta", "menos") else max(x[0], first)
-            hi = x[-1] if kind in ("encima", "al_menos") else min(x[-1], first if second is None else second)
+            end = x if interval_ends is None else interval_ends
+            colors = np.where((x >= integer_event[0]) & (end <= integer_event[1]), curve_color, outside)
+            if interval_ends is None:
+                self.ax.bar(x, finite_y, width=.8, color=colors)
+            else:
+                self.ax.bar(x - .5, finite_y, width=end - x + 1, align="edge", color=colors)
+        if cumulative:
+            if integer_event is not None:
+                lo, hi = max(x[0], integer_event[0]), min(x[-1], integer_event[1] + 1)
+            else:
+                lo = x[0] if kind in ("hasta", "menos") else max(x[0], first)
+                hi = x[-1] if kind in ("encima", "al_menos") else min(x[-1], first if second is None else second)
             if hi > lo:
                 self.ax.axvspan(lo, hi, color=fill_color, alpha=.46, linewidth=0)
+            if empirical and (kind == "exacta" or first == second):
+                index = np.searchsorted(x, first)
+                if 0 < index < len(x) and x[index] == first and y[index] > y[index - 1]:
+                    self.ax.vlines(first, y[index - 1], y[index], color=curve_color, linewidth=5)
         elif style == "curva" and not cumulative:
             self.ax.fill_between(x, 0, finite_y,
                                  where=self._continuous_mask(x, kind, first, second),
                                  color=fill_color, alpha=.58, linewidth=0)
-        padding = .55 if style == "barras" else max((x[-1] - x[0]) * .015, 1e-12)
+        padding = .55 if style in ("barras", "intervalos") else max((x[-1] - x[0]) * .015, 1e-12)
         if x[0] == x[-1]:
             padding = .5
         midpoint = (x[0] + x[-1]) / 2
@@ -968,12 +1022,18 @@ class FitecApp:
                 continue
             marker = limit
             self._plot_limits[field] = marker
-            height = np.interp(marker, x, finite_y) if style == "curva" and not cumulative else top * .96
+            height = top * .96
+            if style == "curva" and not cumulative:
+                height = float(evaluator(marker)) if evaluator is not None else np.interp(marker, x, finite_y)
+                if not np.isfinite(height):
+                    height = top * .96
             self.ax.vlines(marker, 0, height, color=curve_color, linewidth=1.35, zorder=4)
             self.ax.plot(marker, 0, "o", clip_on=False, transform=self.ax.get_xaxis_transform(),
                          markersize=7, markerfacecolor=canvas_color, markeredgecolor=curve_color,
                          markeredgewidth=1.5, zorder=5)
         self._plot_data = (x, finite_y, style)
+        self._plot_evaluator = evaluator
+        self._plot_interval_ends = interval_ends
         self._tooltip = self.ax.annotate(
             "", xy=(0, 0), xytext=(10, 12), textcoords="offset points",
             color=text_color, fontsize=9,
@@ -994,18 +1054,18 @@ class FitecApp:
         self._animation_id = self.root.after(25, self._fade_line, line, frame + 1) if frame < 5 else None
 
     @staticmethod
-    def _inside_probability(k, kind, first, second):
+    def _integer_event_bounds(kind, first, second):
         if kind == "exacta":
-            return float(k) == first
+            return first, first
         if kind == "hasta":
-            return k <= math.floor(first)
+            return -np.inf, math.floor(first)
         if kind == "menos":
-            return k < first
+            return -np.inf, math.ceil(first) - 1
         if kind == "encima":
-            return k > math.floor(first)
+            return math.floor(first) + 1, np.inf
         if kind == "al_menos":
-            return k >= math.ceil(first)
-        return math.ceil(first) <= k <= math.floor(second)
+            return math.ceil(first), np.inf
+        return math.ceil(first), math.floor(second)
 
     @staticmethod
     def _continuous_mask(x, kind, first, second):

@@ -32,6 +32,8 @@ New-Item -ItemType Directory -Path $OutputDir | Out-Null
     --collect-all scipy `
     --collect-all matplotlib `
     --hidden-import matplotlib.backends.backend_tkagg `
+    --copy-metadata openpyxl `
+    --copy-metadata et-xmlfile `
     --add-data "LICENSE:." `
     --add-data "probviz/assets:probviz/assets" `
     desktop_app.py

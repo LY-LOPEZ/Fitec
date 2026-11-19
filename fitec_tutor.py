@@ -331,7 +331,7 @@ def local_suggestion(exercise):
         df = _extract(text, r"\b(?:m|gl|grados de libertad|df)\b")
         params = {} if df is None else {"df": int(round(df)) if float(df).is_integer() else df}
         return Suggestion("Chi-cuadrado", params,
-                          "La distribución Chi-cuadrado con m grados de libertad tiene media m y varianza 2m.", (), event)
+                          "La distribución Ji-cuadrado con m grados de libertad tiene media m y varianza 2m.", (), event)
 
     if "student" in text or "t-student" in text:
         df = _extract(text, r"\b(?:m|gl|grados de libertad|df)\b")
@@ -374,7 +374,7 @@ def local_suggestion(exercise):
                           ("Los valores pertenecen a un intervalo continuo acotado [a, b].",), event)
 
     return Suggestion("", {}, "La guía local reconoce ejercicios típicos de tiempos entre llegadas, "
-                      "recuentos y distribuciones del curso con sus parámetros o media/varianza. Indica qué se mide, "
+                      "número de eventos y distribuciones del curso con sus parámetros o media/varianza. Indica qué se mide, "
                       "la unidad y los parámetros, o consulta la IA en línea.")
 
 
@@ -534,7 +534,7 @@ def online_suggestion(key, exercise, models):
         "parámetros. Si no hay modelo adecuado, usa nombre vacío. Usa event solo si se pide una probabilidad "
         "que FITEC puede representar: hasta significa X≤x, menos X<x, encima X>x, al_menos X≥x, entre incluye "
         "extremos a≤X≤b, exacta es X=k para un entero discreto. FITEC hace los cálculos; no inventes referencias. "
-        "En Exponencial, Erlang y Poisson lambda_param es la tasa (o media de recuento en Poisson). "
+        "En Exponencial y Erlang, lambda_param es la tasa; en Poisson, es el número medio de eventos en el intervalo. "
         "En FITEC, 'Geométrica' cuenta fracasos antes del primer éxito desde 0 (x=0,1,2,...); si el ejercicio "
         "cuenta ensayos hasta el primer éxito desde 1, utiliza 'Geométrica (ensayos)'. "
         "Catálogo y claves: " + json.dumps(models, ensure_ascii=False)

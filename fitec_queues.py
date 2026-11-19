@@ -66,7 +66,7 @@ class ServiceFit:
             valid_parameters = False
         if not valid_parameters:
             raise ValueError("Los parámetros guardados para la atención no son válidos.")
-        result = cls(model.scipy_name, tuple(parameters), summary)
+        result = cls(model.key, tuple(parameters), summary)
         service_duration_mean(result.frozen())
         return result
 
@@ -328,7 +328,7 @@ class QueueSimulator:
         try:
             mean = service_duration_mean(fitted.frozen())
         except ValueError as exc:
-            raise ValueError(f"{fit.candidate.label} · {exc}") from exc
+            raise ValueError(f"{fit.candidate.display_name} · {exc}") from exc
         self._set_fit(fitted)
         self.vars["service_mean"].set(f"{mean:.8g}".replace(".", ","))
 
@@ -339,10 +339,10 @@ class QueueSimulator:
             self.lanes[1].title.configure(text="Exponencial")
             self.fit_note.configure(text="")
         else:
-            name = MODELS[fit.model].label
+            model = MODELS[fit.model]
             self.service_entry.state(["readonly"])
-            self.lanes[1].title.configure(text=f"{name} ajustada")
-            self.fit_note.configure(text=f"Atención ajustada en minutos · {fit.summary}")
+            self.lanes[1].title.configure(text=f"{model.display_name} ajustada")
+            self.fit_note.configure(text=f"Atención ajustada en minutos · {model.parameter_summary(fit.parameters)}")
         self._reset()
 
     def session_settings(self):

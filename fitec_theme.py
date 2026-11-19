@@ -3,7 +3,7 @@
 from contextlib import contextmanager
 from dataclasses import dataclass
 import tkinter as tk
-from tkinter import ttk
+from tkinter import font as tkfont, ttk
 from weakref import WeakKeyDictionary
 
 
@@ -26,16 +26,17 @@ class NightColors:
 
 
 NIGHT = NightColors()
+ZOOM_LEVELS = (90, 100, 110, 125)
 
 STYLES = (
     ".", "TFrame", "Panel.TFrame", "Header.TFrame", "Mint.TFrame",
     "TLabel", "Help.TLabel", "Section.TLabel", "Error.TLabel",
-    "TEntry", "TSpinbox", "TCombobox", "TButton", "Primary.TButton",
-    "Toolbar.TButton", "Theme.TButton", "Menu.TMenubutton",
+    "TEntry", "Cell.TEntry", "TSpinbox", "TCombobox", "TButton", "Primary.TButton",
+    "Toolbar.TButton", "Data.TButton", "Theme.TButton", "Menu.TMenubutton",
     "Toolbutton", "Nav.Toolbutton", "Graph.Toolbutton", "Surface.Graph.Toolbutton", "TCheckbutton",
     "TRadiobutton", "TSeparator", "Horizontal.TScale", "TScrollbar",
     "TNotebook", "TNotebook.Tab", "Sample.TNotebook", "Sample.TNotebook.Tab",
-    "Treeview", "Treeview.Heading", "Sample.Treeview", "Sample.Treeview.Heading",
+    "Treeview", "Data.Treeview", "Treeview.Heading", "Sample.Treeview", "Sample.Treeview.Heading",
 )
 WIDGET_COLORS = (
     "background", "foreground", "disabledforeground", "activebackground", "activeforeground",
@@ -89,6 +90,16 @@ class FitecTheme:
         self.day_theme = self.style.theme_use()
         self.name = "fitec-night"
         self.night = False
+        self.zoom = 100
+        self._fonts = {}
+        self._custom_fonts = {}
+        for name in tkfont.names(root):
+            font = tkfont.nametofont(name, root=root)
+            self._fonts[name] = (font, font.cget("size"))
+        self._row_heights = {
+            name: int(self.style.lookup(name, "rowheight") or 20)
+            for name in ("Treeview", "Sample.Treeview")
+        }
         self._originals = WeakKeyDictionary()
         self._dropdowns = {}
         root.bind_all("<Map>", self._on_map, add="+")
@@ -150,6 +161,56 @@ class FitecTheme:
             self.style.theme_use(self.day_theme)
         self.night = enabled
         self._recolor_tree(self.root)
+        self._apply_zoom_styles()
+
+    def set_zoom(self, percentage):
+        self.zoom = percentage
+        factor = percentage / 100
+        for font, size in self._fonts.values():
+            font.configure(size=round(size * factor))
+        for icon in getattr(self.root, "_fitec_icons", ()):
+            icon.resize(factor)
+        self._apply_zoom_styles()
+        self._zoom_widget_tree(self.root)
+
+    def _zoom_font(self, spec):
+        key = str(spec)
+        if not key or key in self._fonts:
+            return None
+        if key not in self._custom_fonts:
+            font = tkfont.Font(root=self.root, font=spec)
+            size = font.cget("size")
+            self._fonts[str(font)] = (font, size)
+            self._custom_fonts[key] = font
+            font.configure(size=round(size * self.zoom / 100))
+        return self._custom_fonts[key]
+
+    def _apply_zoom_styles(self):
+        for name in STYLES:
+            options = self.style.configure(name) or {}
+            font = self._zoom_font(options.get("font", ""))
+            if font is not None:
+                self.style.configure(name, font=font)
+        for name, base in self._row_heights.items():
+            self.style.configure(name, rowheight=round(base * self.zoom / 100))
+        self.configure_data_rows()
+
+    def configure_data_rows(self, editor_height=0):
+        font = self._fonts["TkTextFont"][0]
+        height = max(editor_height, font.metrics("linespace") + 4,
+                     round(self._row_heights["Treeview"] * self.zoom / 100))
+        self.style.configure("Data.Treeview", rowheight=height)
+
+    def _zoom_widget(self, widget):
+        if "font" in widget.keys():
+            font = self._zoom_font(widget.cget("font"))
+            if font is not None:
+                widget.configure(font=font)
+
+    def _zoom_widget_tree(self, widget):
+        self._zoom_widget(widget)
+        for child in widget.winfo_children():
+            self._zoom_widget_tree(child)
 
     @contextmanager
     def building_window(self):
@@ -159,6 +220,8 @@ class FitecTheme:
         finally:
             if self.night:
                 self.set_night(True)
+            self._apply_zoom_styles()
+            self._zoom_widget_tree(self.root)
 
     def update_colors(self, widget, **colors):
         day = self._day_colors(widget)
@@ -199,8 +262,11 @@ class FitecTheme:
         widget.tk.call(popup, "configure", *args)
 
     def _on_map(self, event):
-        if self.night and isinstance(event.widget, tk.Misc):
-            self._recolor(event.widget)
+        if isinstance(event.widget, tk.Misc):
+            if self.night:
+                self._recolor(event.widget)
+            if self.zoom != 100:
+                self._zoom_widget(event.widget)
         elif self.night and isinstance(event.widget, str) and event.widget.endswith(".popdown"):
             try:
                 self._recolor_dropdown(self.root.nametowidget(event.widget[:-8]))

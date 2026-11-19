@@ -8,6 +8,7 @@ import tkinter as tk
 from tkinter import simpledialog, ttk
 from tkinter.scrolledtext import ScrolledText
 
+from fitec_labels import labeled_parameters, model_display_name, parameter_display_value
 from fitec_tutor import (
     EXERCISE, REFERENCES, congruential_rows, decimal, local_suggestion,
     online_explanation, online_suggestion, probability_steps, valid_event,
@@ -256,10 +257,10 @@ class FitecAssistant:
         if suggestion.name in self.catalog:
             spec, discrete = self.catalog[suggestion.name]
             factory, defaults, labels = spec
-            lines.extend(["", f"Distribución: {suggestion.name}"])
+            lines.extend(["", f"Distribución: {model_display_name(suggestion.name)}"])
             for key, value in suggestion.parameters.items():
                 if key in labels and isinstance(value, (int, float)):
-                    lines.append(f"{labels[key]} = {decimal(value)}")
+                    lines.append(f"{labels[key]} = {decimal(parameter_display_value(suggestion.name, key, value))}")
             missing = defaults.keys() - suggestion.parameters.keys()
             if missing:
                 lines.append("Faltan: " + ", ".join(labels[key] for key in defaults if key in missing) + ".")
@@ -319,7 +320,7 @@ class FitecAssistant:
         dec_result = explorer.decimal_result.cget("text")
         full_result = f"{result} ({dec_result.lstrip('= ').strip()})" if dec_result else result
         name, kind = settings["name"], settings["probability"]
-        lines = [name, f"{explorer.formula.cget('text')} = {full_result}", ""]
+        lines = [model_display_name(name), f"{explorer.formula.cget('text')} = {full_result}", ""]
         if name == "Empírica":
             values = self.parse_observations(settings["observations"])
             first = float(settings["first"].replace(",", "."))
@@ -347,8 +348,8 @@ class FitecAssistant:
             dist = spec[0](**params)
             first = float(settings["first"].replace(",", "."))
             second = float(settings["second"].replace(",", ".")) if kind == "entre" else None
-            lines.append("Parámetros: " + ", ".join(f"{spec[2][key].split(' · ')[0]} = {decimal(value)}"
-                                                   for key, value in params.items()) + ".")
+            lines.append("Parámetros: " + ", ".join(f"{label} = {decimal(value)}"
+                                                   for label, value in labeled_parameters(name, params).items()) + ".")
             mean, var = dist.mean(), dist.var()
             if math.isfinite(mean) or math.isfinite(var):
                 mean_txt = decimal(mean) if math.isfinite(mean) else "no definida"
